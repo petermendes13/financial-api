@@ -1,6 +1,8 @@
 const { z } = require('zod');
 const {
   accountSchema,
+  painelSchema,
+  painelUpdateSchema,
   accountUpdateSchema,
   transactionSchema,
   transactionUpdateSchema,
@@ -23,6 +25,9 @@ const accountQuerySchema = z.object({
   includeInactive: z.enum(['true', 'false']).default('false'),
 }).strict();
 
+const painelQuerySchema = z.object({
+  includeInactive: z.enum(['true', 'false']).default('false'),
+}).strict();
 function validationError(reply, error) {
   return reply.code(400).send({
     error: {
@@ -63,10 +68,22 @@ async function apiRoutes(app) {
     return reply.code(201).send({ data: account });
   });
 
+  app.post('/painel', async (request, reply) => {
+    const input = parseBody(painelSchema, request, reply);
+    if (!input) return;
+    const painel = repository.createPainel(input);
+    return reply.code(201).send({ data: painel });
+  });
   app.get('/accounts', async (request, reply) => {
     const parsed = accountQuerySchema.safeParse(request.query);
     if (!parsed.success) return validationError(reply, parsed.error);
     return { data: repository.listAccounts({ includeInactive: parsed.data.includeInactive === 'true' }) };
+  });
+
+  app.get('/painel', async (request, reply) => {
+    const parsed = painelQuerySchema.safeParse(request.query);
+    if (!parsed.success) return validationError(reply, parsed.error);
+    return { data: repository.listPainels({ includeInactive: parsed.data.includeInactive === 'true' }) };
   });
 
   app.get('/accounts/:id', async (request, reply) => {
@@ -77,6 +94,13 @@ async function apiRoutes(app) {
     return { data: account };
   });
 
+  app.get('/painel/:id', async (request, reply) => {
+    const painel = repository.getPainel(request.params.id);
+    if (!painel) {
+      return reply.code(404).send({ error: { code: 'PAINEL_NOT_FOUND', message: 'Painel não encontrada.' } });
+    }
+    return { data: painel };
+  });
   app.patch('/accounts/:id', async (request, reply) => {
     const input = parseBody(accountUpdateSchema, request, reply);
     if (!input) return;
@@ -84,6 +108,12 @@ async function apiRoutes(app) {
     return { data: account };
   });
 
+  app.patch('/painel/:id', async (request, reply) => {
+    const input = parseBody(painelUpdateSchema, request, reply);
+    if (!input) return;
+    const painel = repository.updatePainel(request.params.id, input);
+    return { data: painel };
+  });
   app.post('/transactions', async (request, reply) => {
     const input = parseBody(transactionSchema, request, reply);
     if (!input) return;

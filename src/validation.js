@@ -12,11 +12,23 @@ const accountSchema = z.object({
   active: z.boolean().default(true),
 }).strict();
 
+const painelSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  type: z.enum(['standart', 'vip', 'pro', 'premium']),
+  num_tel: z.string().trim().min(1).max(20),
+  chat_id: z.string().trim().min(1).max(100),
+  active: z.boolean().default(true),
+}).strict();
+
 const accountUpdateSchema = accountSchema.partial().strict().refine(
   (input) => Object.keys(input).length > 0,
   { message: 'Informe pelo menos um campo para atualizar.' },
 );
 
+const painelUpdateSchema = accountSchema.partial().strict().refine(
+  (input) => Object.keys(input).length > 0,
+  { message: 'Informe pelo menos um campo para atualizar.' },
+);
 const transactionSchema = z.object({
   accountId: uuid,
   type: z.enum(['income', 'expense', 'transfer_in', 'transfer_out']),
@@ -86,7 +98,9 @@ function firstDayOfCurrentMonth() {
 
 module.exports = {
   accountSchema,
+  painelSchema,
   accountUpdateSchema,
+  painelUpdateSchema,
   transactionSchema,
   transactionUpdateSchema,
   transferSchema,
