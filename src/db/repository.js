@@ -14,6 +14,20 @@ class ConflictError extends Error {
   }
 }
 
+function toPainel(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    active: Boolean(row.active),
+    num_tel: row.num_tel,
+    chat_id: row.chat_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function toAccount(row) {
   if (!row) return null;
   return {
@@ -26,8 +40,6 @@ function toAccount(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
-}
-
 function toTransaction(row) {
   if (!row) return null;
   return {
@@ -69,16 +81,81 @@ class FinancialRepository {
     return this.getAccount(id);
   }
 
+  createPainel(input) {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO painel
+        (id, name, type, active, num_tel, chat_id, created_at, updated_at)
+      VALUES
+        (@id, @name, @type, @active, @num_tel, @chat_id, @now, @now)
+    `).run({
+      id,
+      name: input.name,
+      type: input.type,
+      num_tel: input.num_tel,
+      chat_id: input.chat_id,
+      active: input.active ? 1 : 0,
+      now,
+    });
+    return this.getPainel(id);
+  }
+
+
+
   listAccounts({ includeInactive = false } = {}) {
     const sql = includeInactive
       ? 'SELECT * FROM accounts ORDER BY active DESC, name ASC'
       : 'SELECT * FROM accounts WHERE active = 1 ORDER BY name ASC';
     return this.db.prepare(sql).all().map(toAccount);
   }
+ 
+
+  listPainels({ includeInactive = false } = {}) {
+    const sql = includeInactive
+      ? 'SELECT * FROM painel ORDER BY active DESC, name ASC'
+      : 'SELECT * FROM painel WHERE active = 1 ORDER BY name ASC';
+    return this.db.prepare(sql).all().map(toPainel);
+  }
 
   getAccount(id) {
     return toAccount(this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id));
   }
+  
+  getPainel(id) {
+    return toPainel(this.db.prepare('SELECT * FROM painel WHERE id = ?').get(id));
+  }
+
+	
+
+  updatePainel(id, input) {
+    this.requirePainel(id);
+    const fields = [];
+    const params = { id, updatedAt: new Date().toISOString() };
+    const columns = {
+      name: 'name',
+      type: 'type',
+      num_tel: 'num_tel',
+      chat_id: 'chat_id'
+    };
+
+    for (const [key, column] of Object.entries(columns)) {
+      if (input[key] !== undefined) {
+        fields.push(`${column} = @${key}`);
+        params[key] = input[key];
+      }
+    }
+    if (input.active !== undefined) {
+      fields.push('active = @active');
+      params.active = input.active ? 1 : 0;
+    }
+
+    fields.push('updated_at = @updatedAt');
+    this.db.prepare(`UPDATE painel SET ${fields.join(', ')} WHERE id = @id`).run(params);
+    return this.getPainel(id);
+  }
+
+
 
   updateAccount(id, input) {
     this.requireAccount(id);
@@ -107,6 +184,12 @@ class FinancialRepository {
     return this.getAccount(id);
   }
 
+
+  requirePainel(id) {
+    const painel = this.getPainel(id);
+    if (!painel) throw new NotFoundError(`Painel ${id} não foi encontrado.`);
+    return painel;
+  }
   requireAccount(id) {
     const account = this.getAccount(id);
     if (!account) throw new NotFoundError(`Conta ${id} não encontrada.`);

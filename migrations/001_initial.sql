@@ -7,22 +7,36 @@ CREATE TABLE IF NOT EXISTS accounts (
   type TEXT NOT NULL CHECK (type IN ('cash', 'checking', 'savings', 'credit_card', 'investment', 'other')),
   currency TEXT NOT NULL DEFAULT 'BRL',
   opening_balance_cents INTEGER NOT NULL DEFAULT 0,
+  painel_id TEXT,
   active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (painel_id) REFERENCES painel(id)
+);
+
+CREATE TABLE IF NOT EXISTS painel (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN('standart', 'vip', 'pro', 'premium')),
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  num_tel TEXT NOT NULL DEFAULT '0',
+  chat_id TEXT NOT NULL DEFAULT '0',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
 CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY,
   account_id TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('income', 'expense', 'transfer_in', 'transfer_out')),
   amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
   category TEXT,
+  painel_id TEXT,
   description TEXT,
   occurred_on TEXT NOT NULL,
   metadata_json TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (account_id) REFERENCES accounts(id)
+  FOREIGN KEY (account_id) REFERENCES accounts(id),
+  FOREIGN KEY (painel_id) REFERENCES painel(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_transactions_account_date
