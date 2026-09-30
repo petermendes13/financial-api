@@ -58,6 +58,32 @@ As respostas de sucesso que retornam uma lista usam o formato:
 }
 ```
 
+### Índice de rotas
+
+Todas as rotas abaixo usam o prefixo `/api/v1`.
+
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| `GET` | `/health` | Verifica se a API está disponível. |
+| `POST` | `/accounts` | Cria uma conta. |
+| `GET` | `/accounts` | Lista e filtra contas. |
+| `GET` | `/accounts/:id` | Consulta uma conta pelo ID. |
+| `PATCH` | `/accounts/:id` | Atualiza parcialmente uma conta. |
+| `POST` | `/painel` | Cria um painel. |
+| `GET` | `/painel` | Lista painéis. |
+| `GET` | `/painel/:id` | Consulta um painel pelo ID. |
+| `PATCH` | `/painel/:id` | Atualiza parcialmente um painel. |
+| `POST` | `/transactions` | Registra uma receita ou despesa. |
+| `GET` | `/transactions` | Lista e filtra lançamentos, com paginação. |
+| `PATCH` | `/transactions/:id` | Atualiza um lançamento. |
+| `DELETE` | `/transactions/:id` | Exclui um lançamento. |
+| `POST` | `/transfers` | Registra uma transferência entre contas. |
+| `PATCH` | `/transfers/:transferId` | Atualiza uma transferência. |
+| `DELETE` | `/transfers/:transferId` | Exclui uma transferência. |
+| `GET` | `/dashboard/summary` | Consulta totais e saldos do período. |
+| `GET` | `/dashboard/expenses-by-category` | Agrupa despesas por categoria. |
+| `GET` | `/dashboard/cash-flow` | Consulta o fluxo diário ou mensal. |
+
 Os erros usam o formato:
 
 ```json
@@ -116,6 +142,62 @@ curl http://localhost:3000/api/v1/health
 ```
 
 Esse endpoint não exige autenticação na versão atual e deve ser utilizado pelo monitoramento da aplicação.
+
+### Rotas de painéis
+
+Painéis podem ser associados a contas e lançamentos por `painelId`. Crie ou consulte o painel para obter o UUID antes de usá-lo nesses recursos.
+
+#### Criar painel
+
+```http
+POST /api/v1/painel
+```
+
+| Campo | Tipo | Obrigatório | Descrição |
+| --- | --- | --- | --- |
+| `name` | string | Sim | Nome do painel, de 1 a 120 caracteres. |
+| `type` | string | Sim | Um dos tipos `standart`, `vip`, `pro` ou `premium`. |
+| `num_tel` | string | Sim | Telefone, de 1 a 20 caracteres. |
+| `chat_id` | string | Sim | Identificador do chat, de 1 a 100 caracteres. |
+| `active` | boolean | Não | Estado do painel. Padrão: `true`. |
+
+Exemplo:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/painel \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Painel principal","type":"standart","num_tel":"5511999999999","chat_id":"chat-123","active":true}'
+```
+
+Resposta `201 Created` contém o painel em `data`, incluindo `id`, `name`, `type`, `active`, `num_tel`, `chat_id`, `createdAt` e `updatedAt`.
+
+#### Listar painéis
+
+```http
+GET /api/v1/painel
+```
+
+| Parâmetro | Tipo | Obrigatório | Descrição |
+| --- | --- | --- | --- |
+| `includeInactive` | `true` ou `false` | Não | Inclui painéis inativos. Padrão: `false`. |
+
+Exemplo: `GET /api/v1/painel?includeInactive=true`. A resposta contém a lista em `data`.
+
+#### Consultar painel por ID
+
+```http
+GET /api/v1/painel/:id
+```
+
+Substitua `:id` pelo UUID retornado ao criar o painel. A resposta `200` contém o painel em `data`; se não existir, a rota retorna `404`.
+
+#### Atualizar painel
+
+```http
+PATCH /api/v1/painel/:id
+```
+
+Envie no corpo JSON os campos que deseja alterar. A implementação do repositório aceita `name`, `type`, `num_tel`, `chat_id` e `active`. Porém, o schema atualmente ligado à rota é o de conta: na prática, apenas `name` e `active` passam pela validação; valores de `type` de painel e os campos `num_tel`/`chat_id` são rejeitados. É necessário corrigir `painelUpdateSchema` em `src/validation.js` para que esses campos possam ser atualizados.
 
 ## 6. Passo 2 — Criar uma conta financeira
 
@@ -200,7 +282,14 @@ Para incluir contas inativas:
 curl 'http://localhost:3000/api/v1/accounts?includeInactive=true'
 ```
 
-Use `painelId` para filtrar contas associadas a um painel: `GET /api/v1/accounts?painelId=<UUID>`.
+Parâmetros aceitos:
+
+| Parâmetro | Tipo | Obrigatório | Descrição |
+| --- | --- | --- | --- |
+| `includeInactive` | `true` ou `false` | Não | Inclui contas inativas. Padrão: `false`. |
+| `painelId` | UUID | Não | Filtra contas pelo painel associado. |
+
+Exemplo: `GET /api/v1/accounts?painelId=<UUID>&includeInactive=true`.
 
 ### Resposta `200 OK`
 
@@ -221,6 +310,14 @@ Use `painelId` para filtrar contas associadas a um painel: `GET /api/v1/accounts
   ]
 }
 ```
+
+### Consultar conta por ID
+
+```http
+GET /api/v1/accounts/:id
+```
+
+Substitua `:id` pelo UUID da conta. A resposta `200` contém a conta em `data`; se o ID não existir, a API retorna `404` com o código `ACCOUNT_NOT_FOUND`.
 
 ### Atualizar dados da conta
 
@@ -253,6 +350,7 @@ Resposta `200 OK`:
     "type": "checking",
     "currency": "BRL",
     "openingBalanceCents": 150000,
+    "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
     "active": true,
     "createdAt": "2026-09-12T19:30:00.000Z",
     "updatedAt": "2026-09-13T00:00:00.000Z"
@@ -463,6 +561,55 @@ curl -X POST http://localhost:3000/api/v1/transfers \
 
 A API grava `transfer_out` na conta de origem e `transfer_in` na conta de destino dentro da mesma transação. Se uma das gravações falhar, nenhuma das duas é mantida.
 
+### Atualizar transferência
+
+```http
+PATCH /api/v1/transfers/:transferId
+```
+
+O parâmetro `transferId` é o identificador retornado pelo `POST /transfers`. Envie um ou mais destes campos no corpo JSON:
+
+| Campo | Tipo | Obrigatório | Descrição |
+| --- | --- | --- | --- |
+| `fromAccountId` | UUID | Não | Nova conta de origem. |
+| `toAccountId` | UUID | Não | Nova conta de destino. |
+| `amountCents` | integer positivo | Não | Novo valor em centavos. |
+| `description` | string ou `null` | Não | Nova descrição. |
+| `occurredOn` | `YYYY-MM-DD` | Não | Nova data da transferência. |
+
+Exemplo:
+
+```bash
+curl -X PATCH http://localhost:3000/api/v1/transfers/2accc208-f1c2-4c74-a7e3-f82f1e0c21a \
+  -H 'Content-Type: application/json' \
+  -d '{"amountCents":35000,"description":"Reserva atualizada"}'
+```
+
+A resposta `200` contém em `data` o `transferId`, contas de origem e destino, valor, descrição e data. Contas precisam ser diferentes e ativas; conflitos retornam `409`.
+
+### Excluir transferência
+
+```http
+DELETE /api/v1/transfers/:transferId
+```
+
+Exclui os dois lançamentos que compõem a transferência. Exemplo:
+
+```bash
+curl -X DELETE http://localhost:3000/api/v1/transfers/2accc208-f1c2-4c74-a7e3-f82f1e0c21a
+```
+
+Resposta `200 OK`:
+
+```json
+{
+  "data": {
+    "transferId": "2accc208-f1c2-4c74-a7e3-f82f1e0c21a",
+    "deleted": true
+  }
+}
+```
+
 ## 10. Passo 6 — Consultar lançamentos
 
 ### Endpoint
@@ -487,8 +634,10 @@ GET /api/v1/transactions
 ### Exemplo
 
 ```bash
-curl 'http://localhost:3000/api/v1/transactions?accountId=d91b76df-918f-4b5e-ac6d-0e8597e12acf&from=2026-09-01&to=2026-09-30&type=expense&limit=20&offset=0'
+curl 'http://localhost:3000/api/v1/transactions?accountId=d91b76df-918f-4b5e-ac6d-0e8597e12acf&painelId=a1b2c3d4-e5f6-4789-8123-456789abcdef&from=2026-09-01&to=2026-09-30&type=expense&limit=20&offset=0'
 ```
+
+Os parâmetros `from` e `to` aceitam datas no formato `YYYY-MM-DD`; `painelId` filtra os lançamentos associados ao painel.
 
 ### Resposta `200 OK`
 
@@ -582,6 +731,14 @@ Este endpoint é indicado para gráfico de pizza, barras ou ranking de despesas.
 GET /api/v1/dashboard/expenses-by-category
 ```
 
+Parâmetros aceitos:
+
+| Parâmetro | Tipo | Obrigatório | Descrição |
+| --- | --- | --- | --- |
+| `from` | `YYYY-MM-DD` | Não | Início do período. Padrão: primeiro dia do mês atual. |
+| `to` | `YYYY-MM-DD` | Não | Fim do período. Padrão: data atual. |
+| `accountId` | UUID | Não | Restringe as despesas a uma conta. |
+
 ### Exemplo
 
 ```bash
@@ -621,7 +778,7 @@ GET /api/v1/dashboard/cash-flow
 
 ### Parâmetros
 
-Além de `from`, `to` e `accountId`, este endpoint aceita:
+Este endpoint aceita os parâmetros de período `from` e `to` e o filtro opcional `accountId` descritos no dashboard. Além deles, aceita:
 
 | Parâmetro | Valores | Padrão | Descrição |
 | --- | --- | --- | --- |

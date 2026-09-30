@@ -40,13 +40,8 @@ function toAccount(row) {
     active: Boolean(row.active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-<<<<<<< HEAD
   };
 }
-
-=======
-  };}
->>>>>>> ca80c94377b491822a99be0471c06a18e9d61ec8
 function toTransaction(row) {
   if (!row) return null;
   return {
