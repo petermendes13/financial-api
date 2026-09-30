@@ -39,7 +39,7 @@ function toAccount(row) {
     active: Boolean(row.active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
+  };}
 function toTransaction(row) {
   if (!row) return null;
   return {
