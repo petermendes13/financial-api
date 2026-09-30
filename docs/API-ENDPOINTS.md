@@ -135,6 +135,7 @@ POST /api/v1/accounts
 | `type` | string | Sim | Tipo da conta. |
 | `currency` | string | Não | Código de três letras. Padrão: `BRL`. |
 | `openingBalanceCents` | integer | Não | Saldo inicial em centavos. Padrão: `0`. |
+| `painelId` | UUID ou `null` | Não | ID de um painel existente associado à conta. |
 | `active` | boolean | Não | Indica se a conta aceita lançamentos. Padrão: `true`. |
 
 Tipos aceitos para `type`:
@@ -152,7 +153,8 @@ curl -X POST http://localhost:3000/api/v1/accounts \
     "name": "Conta corrente",
     "type": "checking",
     "currency": "BRL",
-    "openingBalanceCents": 150000
+    "openingBalanceCents": 150000,
+    "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef"
   }'
 ```
 
@@ -166,6 +168,7 @@ curl -X POST http://localhost:3000/api/v1/accounts \
     "type": "checking",
     "currency": "BRL",
     "openingBalanceCents": 150000,
+    "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
     "active": true,
     "createdAt": "2026-09-12T19:30:00.000Z",
     "updatedAt": "2026-09-12T19:30:00.000Z"
@@ -197,6 +200,8 @@ Para incluir contas inativas:
 curl 'http://localhost:3000/api/v1/accounts?includeInactive=true'
 ```
 
+Use `painelId` para filtrar contas associadas a um painel: `GET /api/v1/accounts?painelId=<UUID>`.
+
 ### Resposta `200 OK`
 
 ```json
@@ -208,6 +213,7 @@ curl 'http://localhost:3000/api/v1/accounts?includeInactive=true'
       "type": "checking",
       "currency": "BRL",
       "openingBalanceCents": 150000,
+      "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
       "active": true,
       "createdAt": "2026-09-12T19:30:00.000Z",
       "updatedAt": "2026-09-12T19:30:00.000Z"
@@ -224,7 +230,7 @@ Use `PATCH` para alterar somente os campos necessários. O campo `id` da URL é 
 PATCH /api/v1/accounts/:id
 ```
 
-Campos aceitos: `name`, `type`, `currency`, `openingBalanceCents` e `active`. Pelo menos um campo deve ser enviado.
+Campos aceitos: `name`, `type`, `currency`, `openingBalanceCents`, `painelId` e `active`. Pelo menos um campo deve ser enviado.
 
 Exemplo:
 
@@ -271,6 +277,7 @@ POST /api/v1/transactions
 | Campo | Tipo | Obrigatório | Descrição |
 | --- | --- | --- | --- |
 | `accountId` | UUID | Sim | ID da conta existente. |
+| `painelId` | UUID ou `null` | Não | ID de um painel existente. Se omitido, usa o painel associado à conta. |
 | `type` | string | Sim | `income`, `expense`, `transfer_in` ou `transfer_out`. |
 | `amountCents` | integer positivo | Sim | Valor em centavos. |
 | `category` | string | Não | Categoria do lançamento. |
@@ -287,6 +294,7 @@ curl -X POST http://localhost:3000/api/v1/transactions \
   -H 'Content-Type: application/json' \
   -d '{
     "accountId": "d91b76df-918f-4b5e-ac6d-0e8597e12acf",
+    "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
     "type": "income",
     "amountCents": 500000,
     "category": "salário",
@@ -321,6 +329,7 @@ curl -X POST http://localhost:3000/api/v1/transactions \
     "id": "c1e7fd2e-a282-44ea-9acf-7f28c9e8d5d1",
     "accountId": "d91b76df-918f-4b5e-ac6d-0e8597e12acf",
     "accountName": "Conta corrente",
+    "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
     "type": "expense",
     "amountCents": 12550,
     "category": "alimentação",
@@ -344,7 +353,7 @@ Use `PATCH` para alterar parcialmente um lançamento existente. O ID pode ser ob
 PATCH /api/v1/transactions/:id
 ```
 
-Campos aceitos: `accountId`, `type`, `amountCents`, `category`, `description`, `occurredOn` e `metadata`. Envie pelo menos um campo.
+Campos aceitos: `accountId`, `painelId`, `type`, `amountCents`, `category`, `description`, `occurredOn` e `metadata`. Envie pelo menos um campo.
 
 Exemplo:
 
@@ -467,6 +476,7 @@ GET /api/v1/transactions
 | Parâmetro | Tipo | Obrigatório | Descrição |
 | --- | --- | --- | --- |
 | `accountId` | UUID | Não | Filtra por conta. |
+| `painelId` | UUID | Não | Filtra pelo painel associado ao lançamento. |
 | `type` | string | Não | Filtra por tipo de lançamento. |
 | `category` | string | Não | Filtra por categoria. |
 | `from` | `YYYY-MM-DD` | Não | Data inicial. |
@@ -489,6 +499,7 @@ curl 'http://localhost:3000/api/v1/transactions?accountId=d91b76df-918f-4b5e-ac6
       "id": "c1e7fd2e-a282-44ea-9acf-7f28c9e8d5d1",
       "accountId": "d91b76df-918f-4b5e-ac6d-0e8597e12acf",
       "accountName": "Conta corrente",
+      "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
       "type": "expense",
       "amountCents": 12550,
       "category": "alimentação",

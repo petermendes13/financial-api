@@ -13,6 +13,7 @@ const {
 
 const transactionQuerySchema = z.object({
   accountId: z.string().uuid().optional(),
+  painelId: z.string().uuid().optional(),
   type: z.enum(['income', 'expense', 'transfer_in', 'transfer_out']).optional(),
   category: z.string().trim().max(80).optional(),
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -23,6 +24,7 @@ const transactionQuerySchema = z.object({
 
 const accountQuerySchema = z.object({
   includeInactive: z.enum(['true', 'false']).default('false'),
+  painelId: z.string().uuid().optional(),
 }).strict();
 
 const painelQuerySchema = z.object({
@@ -77,7 +79,10 @@ async function apiRoutes(app) {
   app.get('/accounts', async (request, reply) => {
     const parsed = accountQuerySchema.safeParse(request.query);
     if (!parsed.success) return validationError(reply, parsed.error);
-    return { data: repository.listAccounts({ includeInactive: parsed.data.includeInactive === 'true' }) };
+    return { data: repository.listAccounts({
+      includeInactive: parsed.data.includeInactive === 'true',
+      painelId: parsed.data.painelId,
+    }) };
   });
 
   app.get('/painel', async (request, reply) => {

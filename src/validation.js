@@ -9,6 +9,7 @@ const accountSchema = z.object({
   type: z.enum(['cash', 'checking', 'savings', 'credit_card', 'investment', 'other']),
   currency,
   openingBalanceCents: z.number().int().default(0),
+  painelId: uuid.nullable().optional(),
   active: z.boolean().default(true),
 }).strict();
 
@@ -36,6 +37,7 @@ const transactionSchema = z.object({
   category: z.string().trim().max(80).optional().nullable(),
   description: z.string().trim().max(500).optional().nullable(),
   occurredOn: isoDate,
+  painelId: uuid.nullable().optional(),
   metadata: z.record(z.unknown()).optional().nullable(),
 }).strict();
 

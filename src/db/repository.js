@@ -36,10 +36,13 @@ function toAccount(row) {
     type: row.type,
     currency: row.currency,
     openingBalanceCents: row.opening_balance_cents,
+    painelId: row.painel_id,
     active: Boolean(row.active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
 function toTransaction(row) {
   if (!row) return null;
   return {
@@ -51,6 +54,7 @@ function toTransaction(row) {
     category: row.category,
     description: row.description,
     occurredOn: row.occurred_on,
+    painelId: row.painel_id,
     metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
     createdAt: row.created_at,
   };
@@ -62,19 +66,21 @@ class FinancialRepository {
   }
 
   createAccount(input) {
+    if (input.painelId) this.requirePainel(input.painelId);
     const id = randomUUID();
     const now = new Date().toISOString();
     this.db.prepare(`
       INSERT INTO accounts
-        (id, name, type, currency, opening_balance_cents, active, created_at, updated_at)
+        (id, name, type, currency, opening_balance_cents, painel_id, active, created_at, updated_at)
       VALUES
-        (@id, @name, @type, @currency, @openingBalanceCents, @active, @now, @now)
+        (@id, @name, @type, @currency, @openingBalanceCents, @painelId, @active, @now, @now)
     `).run({
       id,
       name: input.name,
       type: input.type,
       currency: input.currency,
       openingBalanceCents: input.openingBalanceCents,
+      painelId: input.painelId || null,
       active: input.active ? 1 : 0,
       now,
     });
@@ -103,11 +109,19 @@ class FinancialRepository {
 
 
 
-  listAccounts({ includeInactive = false } = {}) {
-    const sql = includeInactive
-      ? 'SELECT * FROM accounts ORDER BY active DESC, name ASC'
-      : 'SELECT * FROM accounts WHERE active = 1 ORDER BY name ASC';
-    return this.db.prepare(sql).all().map(toAccount);
+  listAccounts({ includeInactive = false, painelId } = {}) {
+    const filters = [];
+    const params = {};
+    if (!includeInactive) filters.push('active = 1');
+    if (painelId) {
+      filters.push('painel_id = @painelId');
+      params.painelId = painelId;
+    }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    return this.db.prepare(`
+      SELECT * FROM accounts ${where}
+      ORDER BY active DESC, name ASC
+    `).all(params).map(toAccount);
   }
  
 
@@ -166,7 +180,10 @@ class FinancialRepository {
       type: 'type',
       currency: 'currency',
       openingBalanceCents: 'opening_balance_cents',
+      painelId: 'painel_id',
     };
+
+    if (input.painelId) this.requirePainel(input.painelId);
 
     for (const [key, column] of Object.entries(columns)) {
       if (input[key] !== undefined) {
@@ -199,19 +216,22 @@ class FinancialRepository {
   createTransaction(input) {
     const account = this.requireAccount(input.accountId);
     if (!account.active) throw new ConflictError('Não é possível lançar em uma conta inativa.');
+    const painelId = input.painelId === undefined ? account.painelId : input.painelId;
+    if (painelId) this.requirePainel(painelId);
 
     const id = randomUUID();
     this.db.prepare(`
       INSERT INTO transactions
-        (id, account_id, type, amount_cents, category, description, occurred_on, metadata_json)
+        (id, account_id, type, amount_cents, category, painel_id, description, occurred_on, metadata_json)
       VALUES
-        (@id, @accountId, @type, @amountCents, @category, @description, @occurredOn, @metadataJson)
+        (@id, @accountId, @type, @amountCents, @category, @painelId, @description, @occurredOn, @metadataJson)
     `).run({
       id,
       accountId: input.accountId,
       type: input.type,
       amountCents: input.amountCents,
       category: input.category || null,
+      painelId: painelId || null,
       description: input.description || null,
       occurredOn: input.occurredOn,
       metadataJson: input.metadata ? JSON.stringify(input.metadata) : null,
@@ -234,19 +254,20 @@ class FinancialRepository {
       const transferId = randomUUID();
       const insert = this.db.prepare(`
         INSERT INTO transactions
-          (id, account_id, type, amount_cents, category, description, occurred_on, metadata_json)
+          (id, account_id, type, amount_cents, category, painel_id, description, occurred_on, metadata_json)
         VALUES
-          (@id, @accountId, @type, @amountCents, @category, @description, @occurredOn, @metadataJson)
+          (@id, @accountId, @type, @amountCents, @category, @painelId, @description, @occurredOn, @metadataJson)
       `);
       const common = {
         amountCents: input.amountCents,
         category: 'transfer',
+        painelId: null,
         description: input.description || 'Transferência entre contas',
         occurredOn: input.occurredOn,
         metadataJson: JSON.stringify({ transferId }),
       };
-      insert.run({ ...common, id: randomUUID(), accountId: from.id, type: 'transfer_out' });
-      insert.run({ ...common, id: randomUUID(), accountId: to.id, type: 'transfer_in' });
+      insert.run({ ...common, painelId: from.painelId, id: randomUUID(), accountId: from.id, type: 'transfer_out' });
+      insert.run({ ...common, painelId: to.painelId, id: randomUUID(), accountId: to.id, type: 'transfer_in' });
       return transferId;
     });
 
@@ -381,6 +402,7 @@ class FinancialRepository {
     const params = { id };
     const values = {
       accountId: 'account_id',
+      painelId: 'painel_id',
       type: 'type',
       amountCents: 'amount_cents',
       category: 'category',
@@ -392,6 +414,7 @@ class FinancialRepository {
       const account = this.requireAccount(input.accountId);
       if (!account.active) throw new ConflictError('Não é possível mover a transação para uma conta inativa.');
     }
+    if (input.painelId) this.requirePainel(input.painelId);
 
     for (const [key, column] of Object.entries(values)) {
       if (input[key] !== undefined) {
@@ -419,10 +442,11 @@ class FinancialRepository {
     return { id, deleted: true };
   }
 
-  listTransactions({ accountId, type, category, from, to, limit, offset }) {
+  listTransactions({ accountId, painelId, type, category, from, to, limit, offset }) {
     const filters = [];
     const params = {};
     if (accountId) { filters.push('t.account_id = @accountId'); params.accountId = accountId; }
+    if (painelId) { filters.push('t.painel_id = @painelId'); params.painelId = painelId; }
     if (type) { filters.push('t.type = @type'); params.type = type; }
     if (category) { filters.push('LOWER(t.category) = LOWER(@category)'); params.category = category; }
     if (from) { filters.push('t.occurred_on >= @from'); params.from = from; }

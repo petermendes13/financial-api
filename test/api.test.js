@@ -33,6 +33,41 @@ test('health check', async () => {
   assert.equal(response.body.status, 'ok');
 });
 
+test('associa painel a contas e transações e filtra consultas por painel', async () => {
+  const painel = payload(await request(app.server)
+    .post('/api/v1/painel')
+    .send({ name: 'Painel integração', type: 'standart', num_tel: '5511999999999', chat_id: 'chat-1' })
+    .expect(201));
+
+  const account = payload(await request(app.server)
+    .post('/api/v1/accounts')
+    .send({ name: 'Conta do painel', type: 'checking', painelId: painel.id })
+    .expect(201));
+  assert.equal(account.painelId, painel.id);
+
+  const transaction = payload(await request(app.server)
+    .post('/api/v1/transactions')
+    .send({
+      accountId: account.id,
+      painelId: painel.id,
+      type: 'income',
+      amountCents: 5000,
+      occurredOn: '2026-09-20',
+    })
+    .expect(201));
+  assert.equal(transaction.painelId, painel.id);
+
+  const accounts = await request(app.server)
+    .get(`/api/v1/accounts?painelId=${painel.id}`)
+    .expect(200);
+  assert.deepEqual(accounts.body.data.map((item) => item.id), [account.id]);
+
+  const transactions = await request(app.server)
+    .get(`/api/v1/transactions?painelId=${painel.id}`)
+    .expect(200);
+  assert.deepEqual(transactions.body.data.map((item) => item.id), [transaction.id]);
+});
+
 test('cria contas, lançamento e consulta resumo', async () => {
   const accountResponse = await request(app.server)
     .post('/api/v1/accounts')
