@@ -136,7 +136,7 @@ class FinancialRepository {
       name: 'name',
       type: 'type',
       num_tel: 'num_tel',
-      chat_id: 'chat_id'
+      chat_id: 'chat_id',
     };
 
     for (const [key, column] of Object.entries(columns)) {
