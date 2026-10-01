@@ -91,6 +91,14 @@ async function apiRoutes(app) {
     return { data: repository.listPainels({ includeInactive: parsed.data.includeInactive === 'true' }) };
   });
 
+  app.get('/painel/chat/:chat_id', async (request, reply) => {
+    const painel = repository.getPainelByChatId(request.params.chat_id);
+    if (!painel) {
+      return reply.code(404).send({ error: { code: 'PAINEL_NOT_FOUND', message: 'Painel não encontrado.' } });
+    }
+    return { data: painel };
+  });
+
   app.get('/accounts/:id', async (request, reply) => {
     const account = repository.getAccount(request.params.id);
     if (!account) {

@@ -39,6 +39,16 @@ test('associa painel a contas e transações e filtra consultas por painel', asy
     .send({ name: 'Painel integração', type: 'standart', num_tel: '5511999999999', chat_id: 'chat-1' })
     .expect(201));
 
+  const painelByChatId = await request(app.server)
+    .get('/api/v1/painel/chat/chat-1')
+    .expect(200);
+  assert.deepEqual(painelByChatId.body.data, painel);
+
+  const missingPainel = await request(app.server)
+    .get('/api/v1/painel/chat/chat-ausente')
+    .expect(404);
+  assert.equal(missingPainel.body.error.code, 'PAINEL_NOT_FOUND');
+
   const account = payload(await request(app.server)
     .post('/api/v1/accounts')
     .send({ name: 'Conta do painel', type: 'checking', painelId: painel.id })

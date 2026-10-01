@@ -71,6 +71,7 @@ Todas as rotas abaixo usam o prefixo `/api/v1`.
 | `PATCH` | `/accounts/:id` | Atualiza parcialmente uma conta. |
 | `POST` | `/painel` | Cria um painel. |
 | `GET` | `/painel` | Lista painéis. |
+| `GET` | `/painel/chat/:chat_id` | Consulta um painel pelo identificador do chat. |
 | `GET` | `/painel/:id` | Consulta um painel pelo ID. |
 | `PATCH` | `/painel/:id` | Atualiza parcialmente um painel. |
 | `POST` | `/transactions` | Registra uma receita ou despesa. |
@@ -190,6 +191,14 @@ GET /api/v1/painel/:id
 ```
 
 Substitua `:id` pelo UUID retornado ao criar o painel. A resposta `200` contém o painel em `data`; se não existir, a rota retorna `404`.
+
+#### Consultar painel por `chat_id`
+
+```http
+GET /api/v1/painel/chat/:chat_id
+```
+
+Substitua `:chat_id` pelo identificador do chat informado ao criar o painel. A resposta `200` contém o registro completo do painel em `data`; se não existir, a rota retorna `404` com o código `PAINEL_NOT_FOUND`.
 
 #### Atualizar painel
 

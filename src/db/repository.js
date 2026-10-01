@@ -139,6 +139,10 @@ class FinancialRepository {
     return toPainel(this.db.prepare('SELECT * FROM painel WHERE id = ?').get(id));
   }
 
+  getPainelByChatId(chatId) {
+    return toPainel(this.db.prepare('SELECT * FROM painel WHERE chat_id = ?').get(chatId));
+  }
+
 	
 
   updatePainel(id, input) {
