@@ -26,7 +26,7 @@ const accountUpdateSchema = accountSchema.partial().strict().refine(
   { message: 'Informe pelo menos um campo para atualizar.' },
 );
 
-const painelUpdateSchema = accountSchema.partial().strict().refine(
+const painelUpdateSchema = painelSchema.partial().strict().refine(
   (input) => Object.keys(input).length > 0,
   { message: 'Informe pelo menos um campo para atualizar.' },
 );

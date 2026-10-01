@@ -78,6 +78,21 @@ test('associa painel a contas e transações e filtra consultas por painel', asy
   assert.deepEqual(transactions.body.data.map((item) => item.id), [transaction.id]);
 });
 
+test('atualiza telefone e chat_id do painel', async () => {
+  const painel = payload(await request(app.server)
+    .post('/api/v1/painel')
+    .send({ name: 'Painel para editar', type: 'standart', num_tel: '5511999999999', chat_id: 'chat-antigo' })
+    .expect(201));
+
+  const updatedPainel = payload(await request(app.server)
+    .patch(`/api/v1/painel/${painel.id}`)
+    .send({ num_tel: '5511888888888', chat_id: 'chat-novo' })
+    .expect(200));
+
+  assert.equal(updatedPainel.num_tel, '5511888888888');
+  assert.equal(updatedPainel.chat_id, 'chat-novo');
+});
+
 test('cria contas, lançamento e consulta resumo', async () => {
   const accountResponse = await request(app.server)
     .post('/api/v1/accounts')
