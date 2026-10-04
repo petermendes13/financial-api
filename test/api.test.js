@@ -76,6 +76,12 @@ test('associa contas e transações ao ambient e filtra por ambientId', async ()
     .send({ name: 'Usuário integração', ambientId: ambient.id, num_tel: '5511999999999', chat_id: 'chat-1' })
     .expect(201));
   assert.equal(user.ambientId, ambient.id);
+  assert.equal(user.active, true);
+
+  const userById = await request(app.server)
+    .get(`/api/v1/users/${user.id}`)
+    .expect(200);
+  assert.equal(userById.body.data.active, true);
 
   const userByChatId = await request(app.server)
     .get('/api/v1/users/chat/chat-1')
@@ -114,6 +120,25 @@ test('associa contas e transações ao ambient e filtra por ambientId', async ()
     .get(`/api/v1/transactions?ambientId=${ambient.id}`)
     .expect(200);
   assert.deepEqual(transactions.body.data.map((item) => item.id), [transaction.id]);
+});
+
+test('retorna active false quando o usuário não tem ambiente associado', async () => {
+  const userId = 'user-without-ambient';
+  const chatId = 'chat-without-ambient';
+  database.db.prepare(`
+    INSERT INTO users (id, name, num_tel, chat_id)
+    VALUES (?, ?, ?, ?)
+  `).run(userId, 'Usuário sem ambiente', '0', chatId);
+
+  const byId = await request(app.server)
+    .get(`/api/v1/users/${userId}`)
+    .expect(200);
+  assert.equal(byId.body.data.active, false);
+
+  const byChat = await request(app.server)
+    .get(`/api/v1/users/chat/${chatId}`)
+    .expect(200);
+  assert.equal(byChat.body.data.active, false);
 });
 
 test('lista usuários por ambientId e combina com includeInactive', async () => {
@@ -172,10 +197,21 @@ test('atualiza ambiente e dados do usuário', async () => {
 
   const user = payload(await request(app.server)
     .post('/api/v1/users')
-    .send({ name: 'Usuário para editar', ambientId: ambient.id })
+    .send({ name: 'Usuário para editar', ambientId: ambient.id, chat_id: 'chat-ambiente-inativo' })
     .expect(201));
   assert.equal(user.num_tel, '0');
-  assert.equal(user.chat_id, '0');
+  assert.equal(user.chat_id, 'chat-ambiente-inativo');
+  assert.equal(user.active, false);
+
+  const inactiveUserById = await request(app.server)
+    .get(`/api/v1/users/${user.id}`)
+    .expect(200);
+  assert.equal(inactiveUserById.body.data.active, false);
+
+  const inactiveUserByChat = await request(app.server)
+    .get('/api/v1/users/chat/chat-ambiente-inativo')
+    .expect(200);
+  assert.equal(inactiveUserByChat.body.data.active, false);
 
   const updatedUser = payload(await request(app.server)
     .patch(`/api/v1/users/${user.id}`)

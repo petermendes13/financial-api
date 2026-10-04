@@ -20,6 +20,7 @@ function toUser(row) {
     id: row.id,
     name: row.name,
     ambientId: row.ambient_id,
+    active: Boolean(row.ambient_active),
     num_tel: row.num_tel,
     chat_id: row.chat_id,
     createdAt: row.created_at,
@@ -162,7 +163,7 @@ class FinancialRepository {
     }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     return this.db.prepare(`
-      SELECT users.* FROM users
+      SELECT users.*, ambient.active AS ambient_active FROM users
       JOIN ambient ON ambient.id = users.ambient_id
       ${where}
       ORDER BY ambient.active DESC, users.name ASC
@@ -181,11 +182,21 @@ class FinancialRepository {
   }
   
   getUser(id) {
-    return toUser(this.db.prepare('SELECT * FROM users WHERE id = ?').get(id));
+    return toUser(this.db.prepare(`
+      SELECT users.*, ambient.active AS ambient_active
+      FROM users
+      LEFT JOIN ambient ON ambient.id = users.ambient_id
+      WHERE users.id = ?
+    `).get(id));
   }
 
   getUserByChatId(chatId) {
-    return toUser(this.db.prepare('SELECT * FROM users WHERE chat_id = ?').get(chatId));
+    return toUser(this.db.prepare(`
+      SELECT users.*, ambient.active AS ambient_active
+      FROM users
+      LEFT JOIN ambient ON ambient.id = users.ambient_id
+      WHERE users.chat_id = ?
+    `).get(chatId));
   }
 
   getAmbient(id) {

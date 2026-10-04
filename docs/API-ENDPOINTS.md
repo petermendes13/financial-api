@@ -187,6 +187,8 @@ Depois crie o usuário com o ID do ambiente retornado. `name` e `ambientId` são
 | `num_tel` | string | Não | De 1 a 20 caracteres após trim; padrão `"0"`. |
 | `chat_id` | string | Não | De 1 a 100 caracteres após trim; padrão `"0"`. |
 
+Objetos de usuário retornam `active`, calculado pelo campo `active` do ambiente associado. Se o ambiente ou o valor estiver ausente/nulo, `active` é retornado como `false`.
+
 ```http
 POST /api/v1/users
 ```
