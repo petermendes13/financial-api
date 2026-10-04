@@ -539,10 +539,11 @@ class FinancialRepository {
     return { items: rows.map(toTransaction), total, limit, offset };
   }
 
-  getDashboardSummary({ from, to, accountId }) {
+  getDashboardSummary({ from, to, accountId, ambientId }) {
     const filters = ['t.occurred_on >= @from', 't.occurred_on <= @to'];
     const params = { from, to };
     if (accountId) { filters.push('t.account_id = @accountId'); params.accountId = accountId; }
+    if (ambientId) { filters.push('t.ambient_id = @ambientId'); params.ambientId = ambientId; }
     const where = filters.join(' AND ');
     const totals = this.db.prepare(`
       SELECT
@@ -555,7 +556,10 @@ class FinancialRepository {
       WHERE ${where}
     `).get(params);
 
-    const accountFilter = accountId ? 'AND a.id = @accountId' : '';
+    const balanceFilters = ['a.active = 1'];
+    const balanceParams = { to };
+    if (accountId) { balanceFilters.push('a.id = @accountId'); balanceParams.accountId = accountId; }
+    if (ambientId) { balanceFilters.push('a.ambient_id = @ambientId'); balanceParams.ambientId = ambientId; }
     const balances = this.db.prepare(`
       SELECT
         a.id AS account_id,
@@ -567,10 +571,10 @@ class FinancialRepository {
                               ELSE 0 END), 0) AS balance_cents
       FROM accounts a
       LEFT JOIN transactions t ON t.account_id = a.id AND t.occurred_on <= @to
-      WHERE a.active = 1 ${accountFilter}
+      WHERE ${balanceFilters.join(' AND ')}
       GROUP BY a.id, a.name, a.currency, a.opening_balance_cents
       ORDER BY a.name ASC
-    `).all({ to, accountId });
+    `).all(balanceParams);
 
     return {
       period: { from, to },
@@ -589,10 +593,11 @@ class FinancialRepository {
     };
   }
 
-  getExpensesByCategory({ from, to, accountId }) {
+  getExpensesByCategory({ from, to, accountId, ambientId }) {
     const filters = ["t.type = 'expense'", 't.occurred_on >= @from', 't.occurred_on <= @to'];
     const params = { from, to };
     if (accountId) { filters.push('t.account_id = @accountId'); params.accountId = accountId; }
+    if (ambientId) { filters.push('t.ambient_id = @ambientId'); params.ambientId = ambientId; }
     const rows = this.db.prepare(`
       SELECT COALESCE(NULLIF(TRIM(t.category), ''), 'Sem categoria') AS category,
              SUM(t.amount_cents) AS amount_cents,
@@ -605,10 +610,11 @@ class FinancialRepository {
     return rows.map((row) => ({ category: row.category, amountCents: row.amount_cents, transactionCount: row.transaction_count }));
   }
 
-  getCashFlow({ from, to, accountId, groupBy }) {
+  getCashFlow({ from, to, accountId, ambientId, groupBy }) {
     const filters = ['t.occurred_on >= @from', 't.occurred_on <= @to'];
     const params = { from, to };
     if (accountId) { filters.push('t.account_id = @accountId'); params.accountId = accountId; }
+    if (ambientId) { filters.push('t.ambient_id = @ambientId'); params.ambientId = ambientId; }
     const periodExpression = groupBy === 'month'
       ? "substr(t.occurred_on, 1, 7)"
       : 't.occurred_on';

@@ -79,6 +79,7 @@ const dateRangeSchema = z.object({
   from: isoDate,
   to: isoDate,
   accountId: uuid.optional(),
+  ambientId: uuid.optional(),
 }).refine(({ from, to }) => from <= to, {
   message: 'A data inicial deve ser menor ou igual à data final.',
   path: ['from'],
@@ -95,6 +96,7 @@ function parseDateRange(query) {
     from: query.from || firstDayOfCurrentMonth(),
     to: query.to || today(),
     accountId: query.accountId,
+    ambientId: query.ambientId,
   });
   return parsed;
 }

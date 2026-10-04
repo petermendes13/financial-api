@@ -197,6 +197,65 @@ test('cria contas, lançamento e consulta resumo', async () => {
   assert.equal(summary.balances[0].balanceCents, 587500);
 });
 
+test('filtra os dashboards por ambientId', async () => {
+  const ambientA = payload(await request(app.server)
+    .post('/api/v1/ambient')
+    .send({ name: 'Ambiente dashboard A', type: 'standart' })
+    .expect(201));
+  const ambientB = payload(await request(app.server)
+    .post('/api/v1/ambient')
+    .send({ name: 'Ambiente dashboard B', type: 'standart' })
+    .expect(201));
+
+  const accountA = payload(await request(app.server)
+    .post('/api/v1/accounts')
+    .send({ name: 'Conta dashboard A', type: 'checking', ambientId: ambientA.id, openingBalanceCents: 100000 })
+    .expect(201));
+  const accountB = payload(await request(app.server)
+    .post('/api/v1/accounts')
+    .send({ name: 'Conta dashboard B', type: 'checking', ambientId: ambientB.id })
+    .expect(201));
+
+  for (const [account, income, expense, category] of [
+    [accountA, 10000, 2000, 'mercado-a'],
+    [accountB, 90000, 7000, 'mercado-b'],
+  ]) {
+    await request(app.server)
+      .post('/api/v1/transactions')
+      .send({ accountId: account.id, type: 'income', amountCents: income, occurredOn: '2026-10-04' })
+      .expect(201);
+    await request(app.server)
+      .post('/api/v1/transactions')
+      .send({ accountId: account.id, type: 'expense', amountCents: expense, category, occurredOn: '2026-10-04' })
+      .expect(201);
+  }
+
+  const period = `from=2026-10-01&to=2026-10-31&ambientId=${ambientA.id}`;
+  const summary = payload(await request(app.server)
+    .get(`/api/v1/dashboard/summary?${period}`)
+    .expect(200));
+  assert.equal(summary.incomeCents, 10000);
+  assert.equal(summary.expenseCents, 2000);
+  assert.equal(summary.transactionCount, 2);
+  assert.deepEqual(summary.balances.map((balance) => balance.accountId), [accountA.id]);
+
+  const expenses = payload(await request(app.server)
+    .get(`/api/v1/dashboard/expenses-by-category?${period}`)
+    .expect(200));
+  assert.deepEqual(expenses, [{ category: 'mercado-a', amountCents: 2000, transactionCount: 1 }]);
+
+  const cashFlow = payload(await request(app.server)
+    .get(`/api/v1/dashboard/cash-flow?${period}&groupBy=month`)
+    .expect(200));
+  assert.deepEqual(cashFlow, [{
+    period: '2026-10',
+    incomeCents: 10000,
+    expenseCents: 2000,
+    transferCents: 0,
+    netCents: 8000,
+  }]);
+});
+
 test('cria transferência atômica e retorna fluxo de caixa mensal', async () => {
   const first = payload(await request(app.server)
     .post('/api/v1/accounts')

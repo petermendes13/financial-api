@@ -715,11 +715,12 @@ GET /api/v1/dashboard/summary
 | `from` | `YYYY-MM-DD` | Não | Início do período. Padrão: primeiro dia do mês atual. |
 | `to` | `YYYY-MM-DD` | Não | Fim do período. Padrão: data atual. |
 | `accountId` | UUID | Não | Restringe o resultado a uma conta. |
+| `ambientId` | UUID | Não | Restringe os lançamentos ao ambiente; a lista de saldos inclui somente contas ativas desse ambiente. |
 
 ### Exemplo
 
 ```bash
-curl 'http://localhost:3000/api/v1/dashboard/summary?from=2026-09-01&to=2026-09-30'
+curl 'http://localhost:3000/api/v1/dashboard/summary?from=2026-09-01&to=2026-09-30&ambientId=a1b2c3d4-e5f6-4789-8123-456789abcdef'
 ```
 
 ### Resposta `200 OK`
@@ -751,7 +752,7 @@ curl 'http://localhost:3000/api/v1/dashboard/summary?from=2026-09-01&to=2026-09-
 
 `netCents` é calculado como `incomeCents - expenseCents`. Transferências não alteram o patrimônio total, pois representam somente movimentações entre contas.
 
-`transactionCount` conta todos os tipos de lançamento no período. A lista `balances` inclui somente contas ativas e calcula saldo inicial mais lançamentos até `to`; o saldo não é limitado pelo início `from`. O filtro opcional `accountId` restringe totais e saldos à conta indicada.
+`transactionCount` conta todos os tipos de lançamento no período. A lista `balances` inclui somente contas ativas e calcula saldo inicial mais lançamentos até `to`; o saldo não é limitado pelo início `from`. Os filtros `accountId` e `ambientId` podem ser combinados. Quando `ambientId` é informado, os totais usam lançamentos marcados com esse ambiente e os saldos mostram contas associadas a ele.
 
 ## 12. Passo 8 — Consultar despesas por categoria
 
@@ -770,11 +771,12 @@ Parâmetros aceitos:
 | `from` | `YYYY-MM-DD` | Não | Início do período. Padrão: primeiro dia do mês atual. |
 | `to` | `YYYY-MM-DD` | Não | Fim do período. Padrão: data atual. |
 | `accountId` | UUID | Não | Restringe as despesas a uma conta. |
+| `ambientId` | UUID | Não | Restringe as despesas aos lançamentos associados ao ambiente. |
 
 ### Exemplo
 
 ```bash
-curl 'http://localhost:3000/api/v1/dashboard/expenses-by-category?from=2026-09-01&to=2026-09-30'
+curl 'http://localhost:3000/api/v1/dashboard/expenses-by-category?from=2026-09-01&to=2026-09-30&ambientId=a1b2c3d4-e5f6-4789-8123-456789abcdef'
 ```
 
 ### Resposta `200 OK`
@@ -810,7 +812,7 @@ GET /api/v1/dashboard/cash-flow
 
 ### Parâmetros
 
-Este endpoint aceita os parâmetros de período `from` e `to` e o filtro opcional `accountId` descritos no dashboard. Além deles, aceita:
+Este endpoint aceita os parâmetros de período `from` e `to` e os filtros opcionais `accountId` e `ambientId` descritos no resumo. Além deles, aceita:
 
 | Parâmetro | Valores | Padrão | Descrição |
 | --- | --- | --- | --- |
@@ -821,7 +823,7 @@ Se `groupBy` tiver qualquer outro valor, a API retorna `400 VALIDATION_ERROR`.
 ### Exemplo diário
 
 ```bash
-curl 'http://localhost:3000/api/v1/dashboard/cash-flow?from=2026-09-01&to=2026-09-30&groupBy=day'
+curl 'http://localhost:3000/api/v1/dashboard/cash-flow?from=2026-09-01&to=2026-09-30&ambientId=a1b2c3d4-e5f6-4789-8123-456789abcdef&groupBy=day'
 ```
 
 ### Exemplo mensal
