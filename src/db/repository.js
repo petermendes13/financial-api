@@ -174,7 +174,26 @@ class FinancialRepository {
     const sql = includeInactive
       ? 'SELECT * FROM ambient ORDER BY active DESC, name ASC'
       : 'SELECT * FROM ambient WHERE active = 1 ORDER BY name ASC';
-    return this.db.prepare(sql).all().map(toAmbient);
+    const ambients = this.db.prepare(sql).all().map((row) => ({ ...toAmbient(row), users: [] }));
+    if (ambients.length === 0) return ambients;
+
+    const users = this.db.prepare(`
+      SELECT users.*, ambient.active AS ambient_active
+      FROM users
+      JOIN ambient ON ambient.id = users.ambient_id
+      ${includeInactive ? '' : 'WHERE ambient.active = 1'}
+      ORDER BY users.name ASC
+    `).all().map(toUser);
+    const usersByAmbientId = new Map(ambients.map((ambient) => [ambient.id, []]));
+
+    for (const user of users) {
+      usersByAmbientId.get(user.ambientId)?.push(user);
+    }
+
+    return ambients.map((ambient) => ({
+      ...ambient,
+      users: usersByAmbientId.get(ambient.id),
+    }));
   }
 
   getAccount(id) {

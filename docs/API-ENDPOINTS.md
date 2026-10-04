@@ -199,6 +199,32 @@ curl -X POST http://localhost:3000/api/v1/users -H 'Content-Type: application/js
 
 `GET /api/v1/ambient` e `GET /api/v1/users` aceitam `includeInactive=true` para incluir ambientes inativos e usuários cujo ambiente está inativo. O padrão é `false`. Cada rota de listagem retorna `200 OK` e uma lista em `data`.
 
+Cada item de `GET /api/v1/ambient` inclui `users`, uma lista dos usuários associados pelo `ambientId`. A lista é vazia quando o ambiente não possui usuários. Os objetos em `users` seguem o formato de usuário e incluem `active` conforme o estado do ambiente.
+
+```json
+{
+  "data": [
+    {
+      "id": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
+      "name": "Plano principal",
+      "type": "standart",
+      "active": true,
+      "datepayment": null,
+      "users": [
+        {
+          "id": "b1b2c3d4-e5f6-4789-8123-456789abcdef",
+          "name": "Bruno",
+          "ambientId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
+          "active": true,
+          "num_tel": "0",
+          "chat_id": "0"
+        }
+      ]
+    }
+  ]
+}
+```
+
 Na listagem de usuários, `ambientId` filtra pelo ambiente associado. Ele pode ser combinado com `includeInactive`:
 
 | Query | Tipo | Obrigatório | Padrão | Descrição |

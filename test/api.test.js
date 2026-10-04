@@ -78,6 +78,12 @@ test('associa contas e transações ao ambient e filtra por ambientId', async ()
   assert.equal(user.ambientId, ambient.id);
   assert.equal(user.active, true);
 
+  const ambientList = await request(app.server)
+    .get('/api/v1/ambient')
+    .expect(200);
+  const listedAmbient = ambientList.body.data.find((item) => item.id === ambient.id);
+  assert.deepEqual(listedAmbient.users.map((listedUser) => listedUser.id), [user.id]);
+
   const userById = await request(app.server)
     .get(`/api/v1/users/${user.id}`)
     .expect(200);
