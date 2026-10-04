@@ -6,7 +6,7 @@ async function start() {
   const database = new DatabaseClient();
   database.migrate();
   const app = createApp({ database, logger: process.env.NODE_ENV !== 'test' });
-  const port = Number(process.env.PORT || 3000);
+  const port = Number(process.env.PORT || 3050);
   const host = process.env.HOST || '0.0.0.0';
 
   try {
