@@ -9,16 +9,22 @@ const accountSchema = z.object({
   type: z.enum(['cash', 'checking', 'savings', 'credit_card', 'investment', 'other']),
   currency,
   openingBalanceCents: z.number().int().default(0),
-  painelId: uuid.nullable().optional(),
+  ambientId: uuid.nullable().optional(),
   active: z.boolean().default(true),
 }).strict();
 
-const painelSchema = z.object({
+const userSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  ambientId: uuid,
+  num_tel: z.string().trim().min(1).max(20).default('0'),
+  chat_id: z.string().trim().min(1).max(100).default('0'),
+}).strict();
+
+const ambientSchema = z.object({
   name: z.string().trim().min(1).max(120),
   type: z.enum(['standart', 'vip', 'pro', 'premium']),
-  num_tel: z.string().trim().min(1).max(20),
-  chat_id: z.string().trim().min(1).max(100),
   active: z.boolean().default(true),
+  datepayment: isoDate.nullable().optional(),
 }).strict();
 
 const accountUpdateSchema = accountSchema.partial().strict().refine(
@@ -26,7 +32,11 @@ const accountUpdateSchema = accountSchema.partial().strict().refine(
   { message: 'Informe pelo menos um campo para atualizar.' },
 );
 
-const painelUpdateSchema = painelSchema.partial().strict().refine(
+const userUpdateSchema = userSchema.partial().strict().refine(
+  (input) => Object.keys(input).length > 0,
+  { message: 'Informe pelo menos um campo para atualizar.' },
+);
+const ambientUpdateSchema = ambientSchema.partial().strict().refine(
   (input) => Object.keys(input).length > 0,
   { message: 'Informe pelo menos um campo para atualizar.' },
 );
@@ -37,7 +47,7 @@ const transactionSchema = z.object({
   category: z.string().trim().max(80).optional().nullable(),
   description: z.string().trim().max(500).optional().nullable(),
   occurredOn: isoDate,
-  painelId: uuid.nullable().optional(),
+  ambientId: uuid.nullable().optional(),
   metadata: z.record(z.unknown()).optional().nullable(),
 }).strict();
 
@@ -100,9 +110,11 @@ function firstDayOfCurrentMonth() {
 
 module.exports = {
   accountSchema,
-  painelSchema,
+  userSchema,
+  ambientSchema,
   accountUpdateSchema,
-  painelUpdateSchema,
+  userUpdateSchema,
+  ambientUpdateSchema,
   transactionSchema,
   transactionUpdateSchema,
   transferSchema,

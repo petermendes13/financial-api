@@ -1,8 +1,10 @@
 const { z } = require('zod');
 const {
   accountSchema,
-  painelSchema,
-  painelUpdateSchema,
+  userSchema,
+  userUpdateSchema,
+  ambientSchema,
+  ambientUpdateSchema,
   accountUpdateSchema,
   transactionSchema,
   transactionUpdateSchema,
@@ -13,7 +15,7 @@ const {
 
 const transactionQuerySchema = z.object({
   accountId: z.string().uuid().optional(),
-  painelId: z.string().uuid().optional(),
+  ambientId: z.string().uuid().optional(),
   type: z.enum(['income', 'expense', 'transfer_in', 'transfer_out']).optional(),
   category: z.string().trim().max(80).optional(),
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -24,10 +26,14 @@ const transactionQuerySchema = z.object({
 
 const accountQuerySchema = z.object({
   includeInactive: z.enum(['true', 'false']).default('false'),
-  painelId: z.string().uuid().optional(),
+  ambientId: z.string().uuid().optional(),
 }).strict();
 
-const painelQuerySchema = z.object({
+const userQuerySchema = z.object({
+  includeInactive: z.enum(['true', 'false']).default('false'),
+}).strict();
+
+const ambientQuerySchema = z.object({
   includeInactive: z.enum(['true', 'false']).default('false'),
 }).strict();
 function validationError(reply, error) {
@@ -70,33 +76,47 @@ async function apiRoutes(app) {
     return reply.code(201).send({ data: account });
   });
 
-  app.post('/painel', async (request, reply) => {
-    const input = parseBody(painelSchema, request, reply);
+  app.post('/users', async (request, reply) => {
+    const input = parseBody(userSchema, request, reply);
     if (!input) return;
-    const painel = repository.createPainel(input);
-    return reply.code(201).send({ data: painel });
+    const user = repository.createUser(input);
+    return reply.code(201).send({ data: user });
   });
+
+  app.post('/ambient', async (request, reply) => {
+    const input = parseBody(ambientSchema, request, reply);
+    if (!input) return;
+    const ambient = repository.createAmbient(input);
+    return reply.code(201).send({ data: ambient });
+  });
+
   app.get('/accounts', async (request, reply) => {
     const parsed = accountQuerySchema.safeParse(request.query);
     if (!parsed.success) return validationError(reply, parsed.error);
     return { data: repository.listAccounts({
       includeInactive: parsed.data.includeInactive === 'true',
-      painelId: parsed.data.painelId,
+      ambientId: parsed.data.ambientId,
     }) };
   });
 
-  app.get('/painel', async (request, reply) => {
-    const parsed = painelQuerySchema.safeParse(request.query);
+  app.get('/users', async (request, reply) => {
+    const parsed = userQuerySchema.safeParse(request.query);
     if (!parsed.success) return validationError(reply, parsed.error);
-    return { data: repository.listPainels({ includeInactive: parsed.data.includeInactive === 'true' }) };
+    return { data: repository.listUsers({ includeInactive: parsed.data.includeInactive === 'true' }) };
   });
 
-  app.get('/painel/chat/:chat_id', async (request, reply) => {
-    const painel = repository.getPainelByChatId(request.params.chat_id);
-    if (!painel) {
-      return reply.code(404).send({ error: { code: 'PAINEL_NOT_FOUND', message: 'Painel não encontrado.' } });
+  app.get('/ambient', async (request, reply) => {
+    const parsed = ambientQuerySchema.safeParse(request.query);
+    if (!parsed.success) return validationError(reply, parsed.error);
+    return { data: repository.listAmbients({ includeInactive: parsed.data.includeInactive === 'true' }) };
+  });
+
+  app.get('/users/chat/:chat_id', async (request, reply) => {
+    const user = repository.getUserByChatId(request.params.chat_id);
+    if (!user) {
+      return reply.code(404).send({ error: { code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' } });
     }
-    return { data: painel };
+    return { data: user };
   });
 
   app.get('/accounts/:id', async (request, reply) => {
@@ -107,13 +127,22 @@ async function apiRoutes(app) {
     return { data: account };
   });
 
-  app.get('/painel/:id', async (request, reply) => {
-    const painel = repository.getPainel(request.params.id);
-    if (!painel) {
-      return reply.code(404).send({ error: { code: 'PAINEL_NOT_FOUND', message: 'Painel não encontrada.' } });
+  app.get('/users/:id', async (request, reply) => {
+    const user = repository.getUser(request.params.id);
+    if (!user) {
+      return reply.code(404).send({ error: { code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' } });
     }
-    return { data: painel };
+    return { data: user };
   });
+
+  app.get('/ambient/:id', async (request, reply) => {
+    const ambient = repository.getAmbient(request.params.id);
+    if (!ambient) {
+      return reply.code(404).send({ error: { code: 'AMBIENT_NOT_FOUND', message: 'Ambiente não encontrado.' } });
+    }
+    return { data: ambient };
+  });
+
   app.patch('/accounts/:id', async (request, reply) => {
     const input = parseBody(accountUpdateSchema, request, reply);
     if (!input) return;
@@ -121,11 +150,22 @@ async function apiRoutes(app) {
     return { data: account };
   });
 
-  app.patch('/painel/:id', async (request, reply) => {
-    const input = parseBody(painelUpdateSchema, request, reply);
+  app.patch('/users/:id', async (request, reply) => {
+    const input = parseBody(userUpdateSchema, request, reply);
     if (!input) return;
-    const painel = repository.updatePainel(request.params.id, input);
-    return { data: painel };
+    const user = repository.updateUser(request.params.id, input);
+    return { data: user };
+  });
+
+  app.delete('/users/:id', async (request, reply) => {
+    return { data: repository.deleteUser(request.params.id) };
+  });
+
+  app.patch('/ambient/:id', async (request, reply) => {
+    const input = parseBody(ambientUpdateSchema, request, reply);
+    if (!input) return;
+    const ambient = repository.updateAmbient(request.params.id, input);
+    return { data: ambient };
   });
   app.post('/transactions', async (request, reply) => {
     const input = parseBody(transactionSchema, request, reply);

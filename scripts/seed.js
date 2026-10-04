@@ -8,9 +8,10 @@ const repository = new FinancialRepository(database.db);
 
 const existing = repository.listAccounts({ includeInactive: true });
 if (existing.length === 0) {
-  repository.createPainel({name: 'bruno', type: 'standart', active: true, num_tel: '1234', chat_id: '1234'});
-  const checking = repository.createAccount({ name: 'Conta corrente', type: 'checking', currency: 'BRL', openingBalanceCents: 150000, active: true });
-  const card = repository.createAccount({ name: 'Cartão de crédito', type: 'credit_card', currency: 'BRL', openingBalanceCents: 0, active: true });
+  const ambient = repository.createAmbient({ name: 'Plano padrão', type: 'standart', active: true });
+  const user = repository.createUser({ name: 'bruno', ambientId: ambient.id, num_tel: '1234', chat_id: '1234' });
+  const checking = repository.createAccount({ name: 'Conta corrente', type: 'checking', currency: 'BRL', openingBalanceCents: 150000, active: true, ambientId: ambient.id });
+  const card = repository.createAccount({ name: 'Cartão de crédito', type: 'credit_card', currency: 'BRL', openingBalanceCents: 0, active: true, ambientId: ambient.id });
   repository.createTransaction({ accountId: checking.id, type: 'income', amountCents: 500000, category: 'salário', description: 'Recebimento mensal', occurredOn: '2026-09-01' });
   repository.createTransaction({ accountId: card.id, type: 'expense', amountCents: 12500, category: 'alimentação', description: 'Mercado', occurredOn: '2026-09-03' });
   repository.createTransaction({ accountId: checking.id, type: 'expense', amountCents: 89000, category: 'moradia', description: 'Aluguel', occurredOn: '2026-09-05' });

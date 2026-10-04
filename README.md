@@ -78,6 +78,14 @@ Todos os endpoints de negócio usam o prefixo `/api/v1`.
 | `GET` | `/api/v1/accounts` | Lista contas ativas; use `?includeInactive=true` para incluir inativas. |
 | `GET` | `/api/v1/accounts/:id` | Consulta uma conta. |
 | `PATCH` | `/api/v1/accounts/:id` | Atualiza parcialmente uma conta. |
+| `POST` | `/api/v1/ambient` | Cria um ambiente. |
+| `GET` | `/api/v1/ambient` | Lista ambientes. |
+| `GET` | `/api/v1/ambient/:id` | Consulta um ambiente. |
+| `PATCH` | `/api/v1/ambient/:id` | Atualiza parcialmente um ambiente. |
+| `POST` | `/api/v1/users` | Cria um usuário vinculado a um ambiente. |
+| `GET` | `/api/v1/users` | Lista usuários. |
+| `GET` | `/api/v1/users/:id` | Consulta um usuário. |
+| `PATCH` | `/api/v1/users/:id` | Atualiza parcialmente um usuário. |
 | `POST` | `/api/v1/transactions` | Cria entrada, saída ou lançamento de transferência. |
 | `GET` | `/api/v1/transactions` | Lista lançamentos com filtros e paginação. |
 | `PATCH` | `/api/v1/transactions/:id` | Atualiza parcialmente uma transação comum. |

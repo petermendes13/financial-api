@@ -33,64 +33,128 @@ test('health check', async () => {
   assert.equal(response.body.status, 'ok');
 });
 
-test('associa painel a contas e transações e filtra consultas por painel', async () => {
-  const painel = payload(await request(app.server)
-    .post('/api/v1/painel')
-    .send({ name: 'Painel integração', type: 'standart', num_tel: '5511999999999', chat_id: 'chat-1' })
+test('migra painel antigo para users e ambient sem perder relacionamentos', () => {
+  const filename = path.join(tempDir, 'legacy.sqlite');
+  const legacy = new DatabaseClient({ filename });
+  legacy.db.exec(fs.readFileSync(path.join(__dirname, '../migrations/001_initial.sql'), 'utf8'));
+  legacy.db.prepare('INSERT INTO schema_migrations (id) VALUES (?)').run('001_initial.sql');
+  legacy.db.prepare(`
+    INSERT INTO painel (id, name, type, active, num_tel, chat_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run('legacy-user', 'Usuário antigo', 'vip', 1, '55110000', 'chat-legacy');
+  legacy.db.prepare(`
+    INSERT INTO accounts (id, name, type, painel_id) VALUES (?, ?, ?, ?)
+  `).run('legacy-account', 'Conta antiga', 'checking', 'legacy-user');
+  legacy.db.prepare(`
+    INSERT INTO transactions (id, account_id, type, amount_cents, occurred_on, painel_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run('legacy-transaction', 'legacy-account', 'income', 100, '2026-10-01', 'legacy-user');
+  legacy.close();
+
+  const upgraded = new DatabaseClient({ filename });
+  upgraded.migrate();
+  assert.equal(upgraded.db.prepare('SELECT ambient_id FROM users WHERE id = ?').get('legacy-user').ambient_id, 'legacy-user');
+  assert.equal(upgraded.db.prepare('SELECT type FROM ambient WHERE id = ?').get('legacy-user').type, 'vip');
+  assert.equal(upgraded.db.prepare('SELECT ambient_id FROM accounts WHERE id = ?').get('legacy-account').ambient_id, 'legacy-user');
+  assert.equal(upgraded.db.prepare('SELECT ambient_id FROM transactions WHERE id = ?').get('legacy-transaction').ambient_id, 'legacy-user');
+  assert.ok(upgraded.db.pragma('foreign_key_list(accounts)').some((foreignKey) => foreignKey.table === 'ambient'));
+  assert.ok(upgraded.db.pragma('foreign_key_list(transactions)').some((foreignKey) => foreignKey.table === 'ambient'));
+  assert.deepEqual(upgraded.db.pragma('foreign_key_check'), []);
+  upgraded.close();
+});
+
+test('associa contas e transações ao ambient e filtra por ambientId', async () => {
+  const ambient = payload(await request(app.server)
+    .post('/api/v1/ambient')
+    .send({ name: 'Ambiente integração', type: 'standart', datepayment: '2026-10-15' })
     .expect(201));
+  assert.equal(ambient.active, true);
+  assert.equal(ambient.datepayment, '2026-10-15');
 
-  const painelByChatId = await request(app.server)
-    .get('/api/v1/painel/chat/chat-1')
+  const user = payload(await request(app.server)
+    .post('/api/v1/users')
+    .send({ name: 'Usuário integração', ambientId: ambient.id, num_tel: '5511999999999', chat_id: 'chat-1' })
+    .expect(201));
+  assert.equal(user.ambientId, ambient.id);
+
+  const userByChatId = await request(app.server)
+    .get('/api/v1/users/chat/chat-1')
     .expect(200);
-  assert.deepEqual(painelByChatId.body.data, painel);
+  assert.deepEqual(userByChatId.body.data, user);
 
-  const missingPainel = await request(app.server)
-    .get('/api/v1/painel/chat/chat-ausente')
+  const missingUser = await request(app.server)
+    .get('/api/v1/users/chat/chat-ausente')
     .expect(404);
-  assert.equal(missingPainel.body.error.code, 'PAINEL_NOT_FOUND');
+  assert.equal(missingUser.body.error.code, 'USER_NOT_FOUND');
 
   const account = payload(await request(app.server)
     .post('/api/v1/accounts')
-    .send({ name: 'Conta do painel', type: 'checking', painelId: painel.id })
+    .send({ name: 'Conta do ambiente', type: 'checking', ambientId: ambient.id })
     .expect(201));
-  assert.equal(account.painelId, painel.id);
+  assert.equal(account.ambientId, ambient.id);
 
   const transaction = payload(await request(app.server)
     .post('/api/v1/transactions')
     .send({
       accountId: account.id,
-      painelId: painel.id,
+      ambientId: ambient.id,
       type: 'income',
       amountCents: 5000,
-      occurredOn: '2026-09-20',
+      occurredOn: '2026-08-20',
     })
     .expect(201));
-  assert.equal(transaction.painelId, painel.id);
+  assert.equal(transaction.ambientId, ambient.id);
 
   const accounts = await request(app.server)
-    .get(`/api/v1/accounts?painelId=${painel.id}`)
+    .get(`/api/v1/accounts?ambientId=${ambient.id}`)
     .expect(200);
   assert.deepEqual(accounts.body.data.map((item) => item.id), [account.id]);
 
   const transactions = await request(app.server)
-    .get(`/api/v1/transactions?painelId=${painel.id}`)
+    .get(`/api/v1/transactions?ambientId=${ambient.id}`)
     .expect(200);
   assert.deepEqual(transactions.body.data.map((item) => item.id), [transaction.id]);
 });
 
-test('atualiza telefone e chat_id do painel', async () => {
-  const painel = payload(await request(app.server)
-    .post('/api/v1/painel')
-    .send({ name: 'Painel para editar', type: 'standart', num_tel: '5511999999999', chat_id: 'chat-antigo' })
+test('atualiza ambiente e dados do usuário', async () => {
+  const ambient = payload(await request(app.server)
+    .post('/api/v1/ambient')
+    .send({ name: 'Ambiente para editar', type: 'standart' })
     .expect(201));
 
-  const updatedPainel = payload(await request(app.server)
-    .patch(`/api/v1/painel/${painel.id}`)
+  const updatedAmbient = payload(await request(app.server)
+    .patch(`/api/v1/ambient/${ambient.id}`)
+    .send({ type: 'vip', active: false, datepayment: '2026-11-01' })
+    .expect(200));
+  assert.equal(updatedAmbient.type, 'vip');
+  assert.equal(updatedAmbient.active, false);
+  assert.equal(updatedAmbient.datepayment, '2026-11-01');
+
+  const user = payload(await request(app.server)
+    .post('/api/v1/users')
+    .send({ name: 'Usuário para editar', ambientId: ambient.id })
+    .expect(201));
+  assert.equal(user.num_tel, '0');
+  assert.equal(user.chat_id, '0');
+
+  const updatedUser = payload(await request(app.server)
+    .patch(`/api/v1/users/${user.id}`)
     .send({ num_tel: '5511888888888', chat_id: 'chat-novo' })
     .expect(200));
 
-  assert.equal(updatedPainel.num_tel, '5511888888888');
-  assert.equal(updatedPainel.chat_id, 'chat-novo');
+  assert.equal(updatedUser.num_tel, '5511888888888');
+  assert.equal(updatedUser.chat_id, 'chat-novo');
+
+  const deletedUser = payload(await request(app.server)
+    .delete(`/api/v1/users/${user.id}`)
+    .expect(200));
+  assert.deepEqual(deletedUser, { id: user.id, deleted: true });
+
+  await request(app.server)
+    .get(`/api/v1/users/${user.id}`)
+    .expect(404);
+
+  assert.ok(await app.repository.getAmbient(ambient.id));
 });
 
 test('cria contas, lançamento e consulta resumo', async () => {
@@ -124,7 +188,7 @@ test('cria contas, lançamento e consulta resumo', async () => {
     .expect(201);
 
   const summaryResponse = await request(app.server)
-    .get('/api/v1/dashboard/summary?from=2026-09-01&to=2026-09-30')
+    .get(`/api/v1/dashboard/summary?from=2026-09-01&to=2026-09-30&accountId=${account.id}`)
     .expect(200);
   const summary = payload(summaryResponse);
   assert.equal(summary.incomeCents, 500000);

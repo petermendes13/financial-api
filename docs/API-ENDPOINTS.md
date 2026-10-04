@@ -1,10 +1,12 @@
-# Documentação da API Financeira
+# API Financeira — Referência de endpoints
 
 ## 1. Objetivo
 
-Esta documentação descreve como consumir a API financeira passo a passo. O fluxo recomendado é criar as contas, registrar os lançamentos, consultar os lançamentos quando necessário e utilizar os endpoints de dashboard para alimentar gráficos e indicadores.
+Esta referência documenta todas as rotas HTTP disponíveis, parâmetros de caminho e query, campos de body, validações, respostas e regras de negócio. O prefixo `/api/v1` é aplicado a todos os endpoints listados, exceto quando indicado.
 
 A API utiliza JSON nas requisições e nas respostas. Todos os valores monetários são representados em **centavos inteiros**. Portanto, `R$ 1.250,50` deve ser enviado como `125050`.
+
+Nenhum endpoint implementa autenticação ou autorização nesta versão. Não exponha a API publicamente sem adicionar esses controles.
 
 ## 2. Pré-requisitos
 
@@ -14,14 +16,12 @@ Com a aplicação executando localmente, a URL base é:
 http://localhost:3000/api/v1
 ```
 
-Para iniciar a aplicação:
+Para iniciar a aplicação localmente (na pasta do projeto):
 
 ```bash
-cd /home/ubuntu/financial-api
 npm install
-cp .env.example .env
 npm run db:migrate
-npm start
+npm run dev
 ```
 
 A API pode ser testada com `curl`, Postman, Insomnia ou qualquer cliente HTTP.
@@ -69,11 +69,16 @@ Todas as rotas abaixo usam o prefixo `/api/v1`.
 | `GET` | `/accounts` | Lista e filtra contas. |
 | `GET` | `/accounts/:id` | Consulta uma conta pelo ID. |
 | `PATCH` | `/accounts/:id` | Atualiza parcialmente uma conta. |
-| `POST` | `/painel` | Cria um painel. |
-| `GET` | `/painel` | Lista painéis. |
-| `GET` | `/painel/chat/:chat_id` | Consulta um painel pelo identificador do chat. |
-| `GET` | `/painel/:id` | Consulta um painel pelo ID. |
-| `PATCH` | `/painel/:id` | Atualiza parcialmente um painel. |
+| `POST` | `/ambient` | Cria um ambiente. |
+| `GET` | `/ambient` | Lista ambientes. |
+| `GET` | `/ambient/:id` | Consulta um ambiente pelo ID. |
+| `PATCH` | `/ambient/:id` | Atualiza parcialmente um ambiente. |
+| `POST` | `/users` | Cria um usuário vinculado a um ambiente. |
+| `GET` | `/users` | Lista usuários. |
+| `GET` | `/users/:id` | Consulta um usuário pelo ID. |
+| `GET` | `/users/chat/:chat_id` | Consulta um usuário pelo identificador do chat. |
+| `PATCH` | `/users/:id` | Atualiza parcialmente um usuário. |
+| `DELETE` | `/users/:id` | Exclui um usuário. |
 | `POST` | `/transactions` | Registra uma receita ou despesa. |
 | `GET` | `/transactions` | Lista e filtra lançamentos, com paginação. |
 | `PATCH` | `/transactions/:id` | Atualiza um lançamento. |
@@ -84,6 +89,8 @@ Todas as rotas abaixo usam o prefixo `/api/v1`.
 | `GET` | `/dashboard/summary` | Consulta totais e saldos do período. |
 | `GET` | `/dashboard/expenses-by-category` | Agrupa despesas por categoria. |
 | `GET` | `/dashboard/cash-flow` | Consulta o fluxo diário ou mensal. |
+
+Nesta versão não existem `DELETE /accounts/:id` nem `DELETE /ambient/:id`; para contas e ambientes, use `PATCH` com `active: false`. Também não existe `GET /transfers/:transferId`; use o `transferId` retornado na criação para atualizar ou excluir a transferência.
 
 Os erros usam o formato:
 
@@ -96,6 +103,8 @@ Os erros usam o formato:
   }
 }
 ```
+
+Os bodies são validados como objetos estritos: propriedades não listadas para cada operação causam `400 VALIDATION_ERROR`. Strings com regra de trim são armazenadas sem espaços nas extremidades. `null` só é válido quando indicado como opção. Query parameters também são estritos em listagens; parâmetros desconhecidos nessas rotas resultam em `400`.
 
 ## 4. Fluxo recomendado de integração
 
@@ -144,69 +153,68 @@ curl http://localhost:3000/api/v1/health
 
 Esse endpoint não exige autenticação na versão atual e deve ser utilizado pelo monitoramento da aplicação.
 
-### Rotas de painéis
+### Ambientes e usuários
 
-Painéis podem ser associados a contas e lançamentos por `painelId`. Crie ou consulte o painel para obter o UUID antes de usá-lo nesses recursos.
+Contas e lançamentos são associados diretamente a um ambiente por `ambientId`. Cada usuário também referencia um ambiente existente por `ambientId`. O tipo e o estado ativo pertencem ao ambiente, que também pode ter uma data de pagamento. Esta seção documenta todas as operações disponíveis para esses dois recursos.
 
-#### Criar painel
+Crie primeiro o ambiente:
 
 ```http
-POST /api/v1/painel
+POST /api/v1/ambient
 ```
 
-| Campo | Tipo | Obrigatório | Descrição |
-| --- | --- | --- | --- |
-| `name` | string | Sim | Nome do painel, de 1 a 120 caracteres. |
-| `type` | string | Sim | Um dos tipos `standart`, `vip`, `pro` ou `premium`. |
-| `num_tel` | string | Sim | Telefone, de 1 a 20 caracteres. |
-| `chat_id` | string | Sim | Identificador do chat, de 1 a 100 caracteres. |
-| `active` | boolean | Não | Estado do painel. Padrão: `true`. |
+O body aceita os campos abaixo. Retorna `201 Created` com o ambiente criado dentro de `data`.
 
-Exemplo:
+| Campo | Tipo | Obrigatório | Regras |
+| --- | --- | --- | --- |
+| `name` | string | Sim | De 1 a 120 caracteres após trim. |
+| `type` | string | Sim | `standart`, `vip`, `pro` ou `premium`. |
+| `active` | boolean | Não | Padrão `true`. |
+| `datepayment` | `YYYY-MM-DD` ou `null` | Não | Data opcional; `null` limpa/informa ausência de data. |
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/painel \
+curl -X POST http://localhost:3000/api/v1/ambient \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Painel principal","type":"standart","num_tel":"5511999999999","chat_id":"chat-123","active":true}'
+  -d '{"name":"Plano principal","type":"standart","datepayment":"2026-10-15"}'
 ```
 
-Resposta `201 Created` contém o painel em `data`, incluindo `id`, `name`, `type`, `active`, `num_tel`, `chat_id`, `createdAt` e `updatedAt`.
+Depois crie o usuário com o ID do ambiente retornado. `name` e `ambientId` são obrigatórios; se `num_tel` ou `chat_id` forem omitidos, cada campo recebe a string `"0"`. A rota retorna `201 Created`.
 
-#### Listar painéis
+| Campo | Tipo | Obrigatório | Regras |
+| --- | --- | --- |
+| `name` | string | Sim | De 1 a 120 caracteres após trim. |
+| `ambientId` | UUID | Sim | ID de um ambiente existente. |
+| `num_tel` | string | Não | De 1 a 20 caracteres após trim; padrão `"0"`. |
+| `chat_id` | string | Não | De 1 a 100 caracteres após trim; padrão `"0"`. |
 
 ```http
-GET /api/v1/painel
+POST /api/v1/users
 ```
 
-| Parâmetro | Tipo | Obrigatório | Descrição |
-| --- | --- | --- | --- |
-| `includeInactive` | `true` ou `false` | Não | Inclui painéis inativos. Padrão: `false`. |
-
-Exemplo: `GET /api/v1/painel?includeInactive=true`. A resposta contém a lista em `data`.
-
-#### Consultar painel por ID
-
-```http
-GET /api/v1/painel/:id
+```bash
+curl -X POST http://localhost:3000/api/v1/users -H 'Content-Type: application/json' -d '{"name":"Bruno","ambientId":"a1b2c3d4-e5f6-4789-8123-456789abcdef","num_tel":"5511999999999","chat_id":"chat-123"}'
 ```
 
-Substitua `:id` pelo UUID retornado ao criar o painel. A resposta `200` contém o painel em `data`; se não existir, a rota retorna `404`.
+`GET /api/v1/ambient` e `GET /api/v1/users` aceitam `includeInactive=true` para incluir ambientes inativos e usuários cujo ambiente está inativo. O padrão é `false`. Cada rota de listagem retorna `200 OK` e uma lista em `data`.
 
-#### Consultar painel por `chat_id`
+| Operação | Parâmetros/body | Resultado |
+| --- | --- | --- |
+| `GET /api/v1/ambient/:id` | `id` na URL | `200` com o ambiente; se não existir, `404 AMBIENT_NOT_FOUND`. |
+| `PATCH /api/v1/ambient/:id` | Um ou mais de `name`, `type`, `active`, `datepayment`; mesmas regras da criação | `200` com o ambiente atualizado. Body vazio retorna `400`; ID desconhecido retorna `404 NOT_FOUND`. |
+| `GET /api/v1/users/:id` | `id` na URL | `200` com o usuário; se não existir, `404 USER_NOT_FOUND`. |
+| `GET /api/v1/users/chat/:chat_id` | `chat_id` na URL | `200` com o usuário correspondente; sem correspondência, `404 USER_NOT_FOUND`. |
+| `PATCH /api/v1/users/:id` | Um ou mais de `name`, `ambientId`, `num_tel`, `chat_id`; mesmas regras da criação | `200` com o usuário atualizado. O ambiente deve existir. |
+| `DELETE /api/v1/users/:id` | `id` na URL; sem body | `200` com `{ "id": "<UUID>", "deleted": true }`; usuário desconhecido retorna `404 NOT_FOUND`. |
 
-```http
-GET /api/v1/painel/chat/:chat_id
+Exemplo de atualização de usuário:
+
+```bash
+curl -X PATCH http://localhost:3000/api/v1/users/123e4567-e89b-12d3-a456-426614174000 -H 'Content-Type: application/json' -d '{"num_tel":"5511888888888","chat_id":"chat-novo"}'
 ```
 
-Substitua `:chat_id` pelo identificador do chat informado ao criar o painel. A resposta `200` contém o registro completo do painel em `data`; se não existir, a rota retorna `404` com o código `PAINEL_NOT_FOUND`.
+Excluir um usuário não exclui o ambiente associado nem contas ou lançamentos: esses recursos se relacionam ao ambiente, não ao usuário.
 
-#### Atualizar painel
-
-```http
-PATCH /api/v1/painel/:id
-```
-
-Envie no corpo JSON os campos que deseja alterar. A implementação do repositório aceita `name`, `type`, `num_tel`, `chat_id` e `active`. Porém, o schema atualmente ligado à rota é o de conta: na prática, apenas `name` e `active` passam pela validação; valores de `type` de painel e os campos `num_tel`/`chat_id` são rejeitados. É necessário corrigir `painelUpdateSchema` em `src/validation.js` para que esses campos possam ser atualizados.
+Não há rota para excluir ambientes. Use `PATCH /ambient/:id` com `{"active":false}` para desativar; usuários desse ambiente deixam de aparecer na listagem padrão, mas continuam acessíveis com `includeInactive=true`.
 
 ## 6. Passo 2 — Criar uma conta financeira
 
@@ -222,18 +230,12 @@ POST /api/v1/accounts
 
 | Campo | Tipo | Obrigatório | Descrição |
 | --- | --- | --- | --- |
-| `name` | string | Sim | Nome da conta. |
-| `type` | string | Sim | Tipo da conta. |
-| `currency` | string | Não | Código de três letras. Padrão: `BRL`. |
-| `openingBalanceCents` | integer | Não | Saldo inicial em centavos. Padrão: `0`. |
-| `painelId` | UUID ou `null` | Não | ID de um painel existente associado à conta. |
-| `active` | boolean | Não | Indica se a conta aceita lançamentos. Padrão: `true`. |
-
-Tipos aceitos para `type`:
-
-```text
-cash, checking, savings, credit_card, investment, other
-```
+| `name` | string | Sim | De 1 a 120 caracteres após trim. |
+| `type` | string | Sim | `cash`, `checking`, `savings`, `credit_card`, `investment` ou `other`. |
+| `currency` | string | Não | Três letras maiúsculas; padrão `BRL`. |
+| `openingBalanceCents` | integer | Não | Saldo inicial em centavos; padrão `0`. Pode ser negativo. |
+| `ambientId` | UUID ou `null` | Não | ID de ambiente existente; padrão `null`. |
+| `active` | boolean | Não | Indica se aceita lançamentos; padrão `true`. |
 
 ### Exemplo
 
@@ -245,7 +247,7 @@ curl -X POST http://localhost:3000/api/v1/accounts \
     "type": "checking",
     "currency": "BRL",
     "openingBalanceCents": 150000,
-    "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef"
+    "ambientId": "a1b2c3d4-e5f6-4789-8123-456789abcdef"
   }'
 ```
 
@@ -259,7 +261,7 @@ curl -X POST http://localhost:3000/api/v1/accounts \
     "type": "checking",
     "currency": "BRL",
     "openingBalanceCents": 150000,
-    "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
+    "ambientId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
     "active": true,
     "createdAt": "2026-09-12T19:30:00.000Z",
     "updatedAt": "2026-09-12T19:30:00.000Z"
@@ -296,9 +298,9 @@ Parâmetros aceitos:
 | Parâmetro | Tipo | Obrigatório | Descrição |
 | --- | --- | --- | --- |
 | `includeInactive` | `true` ou `false` | Não | Inclui contas inativas. Padrão: `false`. |
-| `painelId` | UUID | Não | Filtra contas pelo painel associado. |
+| `ambientId` | UUID | Não | Filtra contas pelo ambiente associado. |
 
-Exemplo: `GET /api/v1/accounts?painelId=<UUID>&includeInactive=true`.
+Exemplo: `GET /api/v1/accounts?ambientId=<UUID>&includeInactive=true`.
 
 ### Resposta `200 OK`
 
@@ -311,7 +313,7 @@ Exemplo: `GET /api/v1/accounts?painelId=<UUID>&includeInactive=true`.
       "type": "checking",
       "currency": "BRL",
       "openingBalanceCents": 150000,
-      "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
+      "ambientId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
       "active": true,
       "createdAt": "2026-09-12T19:30:00.000Z",
       "updatedAt": "2026-09-12T19:30:00.000Z"
@@ -336,7 +338,7 @@ Use `PATCH` para alterar somente os campos necessários. O campo `id` da URL é 
 PATCH /api/v1/accounts/:id
 ```
 
-Campos aceitos: `name`, `type`, `currency`, `openingBalanceCents`, `painelId` e `active`. Pelo menos um campo deve ser enviado.
+Campos aceitos: `name`, `type`, `currency`, `openingBalanceCents`, `ambientId` e `active`, com as mesmas regras da criação. `ambientId: null` remove a associação ao ambiente. Pelo menos um campo deve ser enviado; body vazio ou propriedade desconhecida resulta em `400 VALIDATION_ERROR`.
 
 Exemplo:
 
@@ -359,7 +361,7 @@ Resposta `200 OK`:
     "type": "checking",
     "currency": "BRL",
     "openingBalanceCents": 150000,
-    "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
+    "ambientId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
     "active": true,
     "createdAt": "2026-09-12T19:30:00.000Z",
     "updatedAt": "2026-09-13T00:00:00.000Z"
@@ -368,6 +370,8 @@ Resposta `200 OK`:
 ```
 
 A alteração de `openingBalanceCents` modifica o saldo inicial usado nos cálculos de saldo. Em produção, essa alteração deve ser permitida somente a usuários autorizados.
+
+Não há rota para excluir contas. Use `PATCH /accounts/:id` com `{"active":false}` para desativar; uma conta inativa não aceita lançamentos nem pode ser usada em novas transferências.
 
 ## 8. Passo 4 — Criar receita ou despesa
 
@@ -383,14 +387,14 @@ POST /api/v1/transactions
 
 | Campo | Tipo | Obrigatório | Descrição |
 | --- | --- | --- | --- |
-| `accountId` | UUID | Sim | ID da conta existente. |
-| `painelId` | UUID ou `null` | Não | ID de um painel existente. Se omitido, usa o painel associado à conta. |
-| `type` | string | Sim | `income`, `expense`, `transfer_in` ou `transfer_out`. |
-| `amountCents` | integer positivo | Sim | Valor em centavos. |
-| `category` | string | Não | Categoria do lançamento. |
-| `description` | string | Não | Descrição livre. |
-| `occurredOn` | `YYYY-MM-DD` | Sim | Data em que ocorreu. |
-| `metadata` | objeto | Não | Dados adicionais do lançamento. |
+| `accountId` | UUID | Sim | ID de uma conta existente e ativa. |
+| `ambientId` | UUID ou `null` | Não | Ambiente existente; se omitido, herda o ambiente da conta. `null` remove o vínculo. |
+| `type` | string | Sim | `income`, `expense`, `transfer_in` ou `transfer_out`. Use `/transfers` para transferências entre contas. |
+| `amountCents` | integer positivo | Sim | Valor em centavos, maior que zero. |
+| `category` | string ou `null` | Não | Até 80 caracteres após trim. |
+| `description` | string ou `null` | Não | Até 500 caracteres após trim. |
+| `occurredOn` | `YYYY-MM-DD` | Sim | Data do lançamento. |
+| `metadata` | objeto ou `null` | Não | Objeto JSON livre para informações adicionais. |
 
 Para uma receita, use `type: "income"`. Para uma despesa, use `type: "expense"`.
 
@@ -401,7 +405,7 @@ curl -X POST http://localhost:3000/api/v1/transactions \
   -H 'Content-Type: application/json' \
   -d '{
     "accountId": "d91b76df-918f-4b5e-ac6d-0e8597e12acf",
-    "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
+    "ambientId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
     "type": "income",
     "amountCents": 500000,
     "category": "salário",
@@ -436,7 +440,7 @@ curl -X POST http://localhost:3000/api/v1/transactions \
     "id": "c1e7fd2e-a282-44ea-9acf-7f28c9e8d5d1",
     "accountId": "d91b76df-918f-4b5e-ac6d-0e8597e12acf",
     "accountName": "Conta corrente",
-    "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
+    "ambientId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
     "type": "expense",
     "amountCents": 12550,
     "category": "alimentação",
@@ -450,7 +454,9 @@ curl -X POST http://localhost:3000/api/v1/transactions \
 }
 ```
 
-Não envie valores negativos. O sentido do lançamento é definido pelo campo `type`.
+O sentido do lançamento é definido por `type`; `amountCents` deve sempre ser positivo. Conta inexistente ou ambiente inexistente resulta em `404 NOT_FOUND`; conta inativa resulta em `409 CONFLICT`.
+
+Embora o schema de lançamento aceite `transfer_in` e `transfer_out`, eles não criam uma transferência vinculada com `transferId`. Para operações entre contas, use sempre `POST /transfers`; lançamentos de transferência não podem ser alterados ou excluídos individualmente.
 
 ### Atualizar uma transação
 
@@ -460,7 +466,20 @@ Use `PATCH` para alterar parcialmente um lançamento existente. O ID pode ser ob
 PATCH /api/v1/transactions/:id
 ```
 
-Campos aceitos: `accountId`, `painelId`, `type`, `amountCents`, `category`, `description`, `occurredOn` e `metadata`. Envie pelo menos um campo.
+Campos aceitos e regras:
+
+| Campo | Tipo | Regras |
+| --- | --- | --- |
+| `accountId` | UUID | Conta existente e ativa. Ao alterar a conta, o ambiente do lançamento não muda automaticamente. |
+| `ambientId` | UUID ou `null` | Ambiente existente ou `null` para remover a associação. |
+| `type` | string | Um dos quatro tipos aceitos na criação; tipos de transferência não podem ser usados para criar/alterar transferências por esta rota. |
+| `amountCents` | integer | Maior que zero. |
+| `category` | string ou `null` | Até 80 caracteres após trim. |
+| `description` | string ou `null` | Até 500 caracteres após trim. |
+| `occurredOn` | string | Formato `YYYY-MM-DD`. |
+| `metadata` | objeto ou `null` | Objeto JSON livre. |
+
+Envie pelo menos um campo. Propriedade não listada ou body vazio retorna `400 VALIDATION_ERROR`.
 
 Exemplo:
 
@@ -536,8 +555,8 @@ POST /api/v1/transfers
 | --- | --- | --- | --- |
 | `fromAccountId` | UUID | Sim | Conta de origem. |
 | `toAccountId` | UUID | Sim | Conta de destino. |
-| `amountCents` | integer positivo | Sim | Valor transferido em centavos. |
-| `description` | string | Não | Descrição da transferência. |
+| `amountCents` | integer positivo | Sim | Valor transferido em centavos, maior que zero. |
+| `description` | string ou `null` | Não | Até 500 caracteres após trim. Se omitida, vazia ou `null`, usa `Transferência entre contas`. |
 | `occurredOn` | `YYYY-MM-DD` | Sim | Data da transferência. |
 
 ### Exemplo
@@ -570,6 +589,8 @@ curl -X POST http://localhost:3000/api/v1/transfers \
 
 A API grava `transfer_out` na conta de origem e `transfer_in` na conta de destino dentro da mesma transação. Se uma das gravações falhar, nenhuma das duas é mantida.
 
+As contas devem existir, estar ativas e ser diferentes. Contas iguais ou inativas retornam `409 CONFLICT`; conta inexistente retorna `404 NOT_FOUND`.
+
 ### Atualizar transferência
 
 ```http
@@ -582,8 +603,8 @@ O parâmetro `transferId` é o identificador retornado pelo `POST /transfers`. E
 | --- | --- | --- | --- |
 | `fromAccountId` | UUID | Não | Nova conta de origem. |
 | `toAccountId` | UUID | Não | Nova conta de destino. |
-| `amountCents` | integer positivo | Não | Novo valor em centavos. |
-| `description` | string ou `null` | Não | Nova descrição. |
+| `amountCents` | integer positivo | Não | Novo valor em centavos, maior que zero. |
+| `description` | string ou `null` | Não | Até 500 caracteres; `null` limpa a descrição. |
 | `occurredOn` | `YYYY-MM-DD` | Não | Nova data da transferência. |
 
 Exemplo:
@@ -594,7 +615,7 @@ curl -X PATCH http://localhost:3000/api/v1/transfers/2accc208-f1c2-4c74-a7e3-f82
   -d '{"amountCents":35000,"description":"Reserva atualizada"}'
 ```
 
-A resposta `200` contém em `data` o `transferId`, contas de origem e destino, valor, descrição e data. Contas precisam ser diferentes e ativas; conflitos retornam `409`.
+A resposta `200` contém em `data` `transferId`, `fromAccountId`, `toAccountId`, `amountCents`, `description` e `occurredOn`. Contas de origem e destino precisam ser diferentes; uma conta substituta deve existir e estar ativa. Conflitos retornam `409 CONFLICT`; transferência ou conta inexistente retorna `404 NOT_FOUND`.
 
 ### Excluir transferência
 
@@ -632,21 +653,21 @@ GET /api/v1/transactions
 | Parâmetro | Tipo | Obrigatório | Descrição |
 | --- | --- | --- | --- |
 | `accountId` | UUID | Não | Filtra por conta. |
-| `painelId` | UUID | Não | Filtra pelo painel associado ao lançamento. |
-| `type` | string | Não | Filtra por tipo de lançamento. |
-| `category` | string | Não | Filtra por categoria. |
-| `from` | `YYYY-MM-DD` | Não | Data inicial. |
-| `to` | `YYYY-MM-DD` | Não | Data final. |
-| `limit` | integer | Não | Quantidade por página. Padrão `50`, máximo `200`. |
-| `offset` | integer | Não | Quantidade de registros ignorados. Padrão `0`. |
+| `ambientId` | UUID | Não | Filtra pelo ambiente associado ao lançamento. |
+| `type` | string | Não | `income`, `expense`, `transfer_in` ou `transfer_out`. |
+| `category` | string | Não | Até 80 caracteres; comparação não diferencia maiúsculas/minúsculas. |
+| `from` | `YYYY-MM-DD` | Não | Data inicial inclusiva. |
+| `to` | `YYYY-MM-DD` | Não | Data final inclusiva. |
+| `limit` | integer | Não | Itens por página; padrão `50`, mínimo `1`, máximo `200`. |
+| `offset` | integer | Não | Itens ignorados; padrão `0`, deve ser maior ou igual a zero. |
 
 ### Exemplo
 
 ```bash
-curl 'http://localhost:3000/api/v1/transactions?accountId=d91b76df-918f-4b5e-ac6d-0e8597e12acf&painelId=a1b2c3d4-e5f6-4789-8123-456789abcdef&from=2026-09-01&to=2026-09-30&type=expense&limit=20&offset=0'
+curl 'http://localhost:3000/api/v1/transactions?accountId=d91b76df-918f-4b5e-ac6d-0e8597e12acf&ambientId=a1b2c3d4-e5f6-4789-8123-456789abcdef&from=2026-09-01&to=2026-09-30&type=expense&limit=20&offset=0'
 ```
 
-Os parâmetros `from` e `to` aceitam datas no formato `YYYY-MM-DD`; `painelId` filtra os lançamentos associados ao painel.
+Os parâmetros `from` e `to` aceitam datas no formato `YYYY-MM-DD`; `ambientId` filtra os lançamentos associados ao ambiente. Os filtros podem ser combinados. Propriedades de query desconhecidas são rejeitadas com `400 VALIDATION_ERROR`.
 
 ### Resposta `200 OK`
 
@@ -657,7 +678,7 @@ Os parâmetros `from` e `to` aceitam datas no formato `YYYY-MM-DD`; `painelId` f
       "id": "c1e7fd2e-a282-44ea-9acf-7f28c9e8d5d1",
       "accountId": "d91b76df-918f-4b5e-ac6d-0e8597e12acf",
       "accountName": "Conta corrente",
-      "painelId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
+      "ambientId": "a1b2c3d4-e5f6-4789-8123-456789abcdef",
       "type": "expense",
       "amountCents": 12550,
       "category": "alimentação",
@@ -730,6 +751,8 @@ curl 'http://localhost:3000/api/v1/dashboard/summary?from=2026-09-01&to=2026-09-
 
 `netCents` é calculado como `incomeCents - expenseCents`. Transferências não alteram o patrimônio total, pois representam somente movimentações entre contas.
 
+`transactionCount` conta todos os tipos de lançamento no período. A lista `balances` inclui somente contas ativas e calcula saldo inicial mais lançamentos até `to`; o saldo não é limitado pelo início `from`. O filtro opcional `accountId` restringe totais e saldos à conta indicada.
+
 ## 12. Passo 8 — Consultar despesas por categoria
 
 Este endpoint é indicado para gráfico de pizza, barras ou ranking de despesas.
@@ -793,6 +816,8 @@ Este endpoint aceita os parâmetros de período `from` e `to` e o filtro opciona
 | --- | --- | --- | --- |
 | `groupBy` | `day` ou `month` | `day` | Define a granularidade da série. |
 
+Se `groupBy` tiver qualquer outro valor, a API retorna `400 VALIDATION_ERROR`.
+
 ### Exemplo diário
 
 ```bash
@@ -804,6 +829,8 @@ curl 'http://localhost:3000/api/v1/dashboard/cash-flow?from=2026-09-01&to=2026-0
 ```bash
 curl 'http://localhost:3000/api/v1/dashboard/cash-flow?from=2026-01-01&to=2026-12-31&groupBy=month'
 ```
+
+`transferCents` soma os lançamentos `transfer_in` e `transfer_out`. Sem filtro por conta, uma transferência entre duas contas contribui com duas pontas para esse total. `netCents` é calculado como `incomeCents - expenseCents`.
 
 ### Resposta `200 OK`
 
@@ -827,10 +854,12 @@ curl 'http://localhost:3000/api/v1/dashboard/cash-flow?from=2026-01-01&to=2026-1
 | --- | --- | --- |
 | `200` | Consulta realizada com sucesso. | Dashboard e listagens. |
 | `201` | Registro criado com sucesso. | Conta, lançamento ou transferência. |
-| `400` | Dados inválidos ou parâmetros incorretos. | Data inválida ou campo ausente. |
-| `404` | Recurso não encontrado. | Conta inexistente. |
-| `409` | Conflito de regra de negócio. | Transferência para a mesma conta. |
-| `500` | Erro inesperado no servidor. | Falha interna não tratada. |
+| `400` | `VALIDATION_ERROR` | Body ou parâmetro de query inválido. |
+| `400` | `INVALID_REFERENCE` | Referência rejeitada pela integridade do banco. |
+| `404` | `NOT_FOUND` | Recurso necessário para a operação não existe. |
+| `404` | `ACCOUNT_NOT_FOUND`, `USER_NOT_FOUND`, `AMBIENT_NOT_FOUND` | Consulta direta ao recurso correspondente não encontra o ID. |
+| `409` | `CONFLICT` | Regra de negócio violada ou registro duplicado. |
+| `500` | `INTERNAL_ERROR` | Falha inesperada no servidor. |
 
 Exemplo de validação inválida:
 
@@ -848,6 +877,8 @@ Exemplo de validação inválida:
   }
 }
 ```
+
+Erros de domínio usam `{ "error": { "code": "NOT_FOUND" ou "CONFLICT", "message": "..." } }`. IDs de conta, ambiente ou usuário informados em bodies também podem resultar em `404 NOT_FOUND` quando não existirem. Datas são verificadas pelo formato `YYYY-MM-DD`; essa validação não verifica se o dia existe no calendário. Em produção, erros `500` retornam mensagem genérica; em desenvolvimento podem expor a mensagem técnica.
 
 ## 15. Exemplo completo em sequência
 

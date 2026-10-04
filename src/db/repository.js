@@ -14,15 +14,27 @@ class ConflictError extends Error {
   }
 }
 
-function toPainel(row) {
+function toUser(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    ambientId: row.ambient_id,
+    num_tel: row.num_tel,
+    chat_id: row.chat_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toAmbient(row) {
   if (!row) return null;
   return {
     id: row.id,
     name: row.name,
     type: row.type,
     active: Boolean(row.active),
-    num_tel: row.num_tel,
-    chat_id: row.chat_id,
+    datepayment: row.datepayment,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -36,7 +48,7 @@ function toAccount(row) {
     type: row.type,
     currency: row.currency,
     openingBalanceCents: row.opening_balance_cents,
-    painelId: row.painel_id,
+    ambientId: row.ambient_id,
     active: Boolean(row.active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -53,7 +65,7 @@ function toTransaction(row) {
     category: row.category,
     description: row.description,
     occurredOn: row.occurred_on,
-    painelId: row.painel_id,
+    ambientId: row.ambient_id,
     metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
     createdAt: row.created_at,
   };
@@ -65,56 +77,72 @@ class FinancialRepository {
   }
 
   createAccount(input) {
-    if (input.painelId) this.requirePainel(input.painelId);
+    if (input.ambientId) this.requireAmbient(input.ambientId);
     const id = randomUUID();
     const now = new Date().toISOString();
     this.db.prepare(`
       INSERT INTO accounts
-        (id, name, type, currency, opening_balance_cents, painel_id, active, created_at, updated_at)
+        (id, name, type, currency, opening_balance_cents, ambient_id, active, created_at, updated_at)
       VALUES
-        (@id, @name, @type, @currency, @openingBalanceCents, @painelId, @active, @now, @now)
+        (@id, @name, @type, @currency, @openingBalanceCents, @ambientId, @active, @now, @now)
     `).run({
       id,
       name: input.name,
       type: input.type,
       currency: input.currency,
       openingBalanceCents: input.openingBalanceCents,
-      painelId: input.painelId || null,
+      ambientId: input.ambientId || null,
       active: input.active ? 1 : 0,
       now,
     });
     return this.getAccount(id);
   }
 
-  createPainel(input) {
+  createUser(input) {
+    this.requireAmbient(input.ambientId);
     const id = randomUUID();
     const now = new Date().toISOString();
     this.db.prepare(`
-      INSERT INTO painel
-        (id, name, type, active, num_tel, chat_id, created_at, updated_at)
+      INSERT INTO users
+        (id, name, ambient_id, num_tel, chat_id, created_at, updated_at)
       VALUES
-        (@id, @name, @type, @active, @num_tel, @chat_id, @now, @now)
+        (@id, @name, @ambientId, @num_tel, @chat_id, @now, @now)
+    `).run({
+      id,
+      name: input.name,
+      ambientId: input.ambientId,
+      num_tel: input.num_tel,
+      chat_id: input.chat_id,
+      now,
+    });
+    return this.getUser(id);
+  }
+
+
+  createAmbient(input) {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO ambient (id, name, type, active, datepayment, created_at, updated_at)
+      VALUES (@id, @name, @type, @active, @datepayment, @now, @now)
     `).run({
       id,
       name: input.name,
       type: input.type,
-      num_tel: input.num_tel,
-      chat_id: input.chat_id,
       active: input.active ? 1 : 0,
+      datepayment: input.datepayment || null,
       now,
     });
-    return this.getPainel(id);
+    return this.getAmbient(id);
   }
 
-
-
-  listAccounts({ includeInactive = false, painelId } = {}) {
+  listAccounts({ includeInactive = false, ambientId } = {}) {
     const filters = [];
     const params = {};
     if (!includeInactive) filters.push('active = 1');
-    if (painelId) {
-      filters.push('painel_id = @painelId');
-      params.painelId = painelId;
+    if (ambientId) {
+      filters.push('ambient_id = @ambientId');
+      params.ambientId = ambientId;
     }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     return this.db.prepare(`
@@ -124,41 +152,46 @@ class FinancialRepository {
   }
  
 
-  listPainels({ includeInactive = false } = {}) {
+  listUsers({ includeInactive = false } = {}) {
+    const sql = `
+      SELECT users.* FROM users
+      JOIN ambient ON ambient.id = users.ambient_id
+      ${includeInactive ? '' : 'WHERE ambient.active = 1'}
+      ORDER BY ambient.active DESC, users.name ASC
+    `;
+    return this.db.prepare(sql).all().map(toUser);
+  }
+
+  listAmbients({ includeInactive = false } = {}) {
     const sql = includeInactive
-      ? 'SELECT * FROM painel ORDER BY active DESC, name ASC'
-      : 'SELECT * FROM painel WHERE active = 1 ORDER BY name ASC';
-    return this.db.prepare(sql).all().map(toPainel);
+      ? 'SELECT * FROM ambient ORDER BY active DESC, name ASC'
+      : 'SELECT * FROM ambient WHERE active = 1 ORDER BY name ASC';
+    return this.db.prepare(sql).all().map(toAmbient);
   }
 
   getAccount(id) {
     return toAccount(this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id));
   }
   
-  getPainel(id) {
-    return toPainel(this.db.prepare('SELECT * FROM painel WHERE id = ?').get(id));
+  getUser(id) {
+    return toUser(this.db.prepare('SELECT * FROM users WHERE id = ?').get(id));
   }
 
-  getPainelByChatId(chatId) {
-    return toPainel(this.db.prepare('SELECT * FROM painel WHERE chat_id = ?').get(chatId));
+  getUserByChatId(chatId) {
+    return toUser(this.db.prepare('SELECT * FROM users WHERE chat_id = ?').get(chatId));
   }
 
-	
+  getAmbient(id) {
+    return toAmbient(this.db.prepare('SELECT * FROM ambient WHERE id = ?').get(id));
+  }
 
-  updatePainel(id, input) {
-    this.requirePainel(id);
+  updateAmbient(id, input) {
+    this.requireAmbient(id);
     const fields = [];
     const params = { id, updatedAt: new Date().toISOString() };
-    const columns = {
-      name: 'name',
-      type: 'type',
-      num_tel: 'num_tel',
-      chat_id: 'chat_id',
-    };
-
-    for (const [key, column] of Object.entries(columns)) {
+    for (const key of ['name', 'type', 'datepayment']) {
       if (input[key] !== undefined) {
-        fields.push(`${column} = @${key}`);
+        fields.push(`${key} = @${key}`);
         params[key] = input[key];
       }
     }
@@ -166,10 +199,40 @@ class FinancialRepository {
       fields.push('active = @active');
       params.active = input.active ? 1 : 0;
     }
+    fields.push('updated_at = @updatedAt');
+    this.db.prepare(`UPDATE ambient SET ${fields.join(', ')} WHERE id = @id`).run(params);
+    return this.getAmbient(id);
+  }
+
+  updateUser(id, input) {
+    this.requireUser(id);
+    const fields = [];
+    const params = { id, updatedAt: new Date().toISOString() };
+    const columns = {
+      name: 'name',
+      num_tel: 'num_tel',
+      chat_id: 'chat_id',
+      ambientId: 'ambient_id',
+    };
+
+    if (input.ambientId) this.requireAmbient(input.ambientId);
+
+    for (const [key, column] of Object.entries(columns)) {
+      if (input[key] !== undefined) {
+        fields.push(`${column} = @${key}`);
+        params[key] = input[key];
+      }
+    }
 
     fields.push('updated_at = @updatedAt');
-    this.db.prepare(`UPDATE painel SET ${fields.join(', ')} WHERE id = @id`).run(params);
-    return this.getPainel(id);
+    this.db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = @id`).run(params);
+    return this.getUser(id);
+  }
+
+  deleteUser(id) {
+    this.requireUser(id);
+    this.db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    return { id, deleted: true };
   }
 
 
@@ -183,10 +246,10 @@ class FinancialRepository {
       type: 'type',
       currency: 'currency',
       openingBalanceCents: 'opening_balance_cents',
-      painelId: 'painel_id',
+      ambientId: 'ambient_id',
     };
 
-    if (input.painelId) this.requirePainel(input.painelId);
+    if (input.ambientId) this.requireAmbient(input.ambientId);
 
     for (const [key, column] of Object.entries(columns)) {
       if (input[key] !== undefined) {
@@ -205,10 +268,15 @@ class FinancialRepository {
   }
 
 
-  requirePainel(id) {
-    const painel = this.getPainel(id);
-    if (!painel) throw new NotFoundError(`Painel ${id} não foi encontrado.`);
-    return painel;
+  requireUser(id) {
+    const user = this.getUser(id);
+    if (!user) throw new NotFoundError(`Usuário ${id} não foi encontrado.`);
+    return user;
+  }
+  requireAmbient(id) {
+    const ambient = this.getAmbient(id);
+    if (!ambient) throw new NotFoundError(`Ambiente ${id} não foi encontrado.`);
+    return ambient;
   }
   requireAccount(id) {
     const account = this.getAccount(id);
@@ -219,22 +287,22 @@ class FinancialRepository {
   createTransaction(input) {
     const account = this.requireAccount(input.accountId);
     if (!account.active) throw new ConflictError('Não é possível lançar em uma conta inativa.');
-    const painelId = input.painelId === undefined ? account.painelId : input.painelId;
-    if (painelId) this.requirePainel(painelId);
+    const ambientId = input.ambientId === undefined ? account.ambientId : input.ambientId;
+    if (ambientId) this.requireAmbient(ambientId);
 
     const id = randomUUID();
     this.db.prepare(`
       INSERT INTO transactions
-        (id, account_id, type, amount_cents, category, painel_id, description, occurred_on, metadata_json)
+        (id, account_id, type, amount_cents, category, ambient_id, description, occurred_on, metadata_json)
       VALUES
-        (@id, @accountId, @type, @amountCents, @category, @painelId, @description, @occurredOn, @metadataJson)
+        (@id, @accountId, @type, @amountCents, @category, @ambientId, @description, @occurredOn, @metadataJson)
     `).run({
       id,
       accountId: input.accountId,
       type: input.type,
       amountCents: input.amountCents,
       category: input.category || null,
-      painelId: painelId || null,
+      ambientId: ambientId || null,
       description: input.description || null,
       occurredOn: input.occurredOn,
       metadataJson: input.metadata ? JSON.stringify(input.metadata) : null,
@@ -257,20 +325,20 @@ class FinancialRepository {
       const transferId = randomUUID();
       const insert = this.db.prepare(`
         INSERT INTO transactions
-          (id, account_id, type, amount_cents, category, painel_id, description, occurred_on, metadata_json)
+          (id, account_id, type, amount_cents, category, ambient_id, description, occurred_on, metadata_json)
         VALUES
-          (@id, @accountId, @type, @amountCents, @category, @painelId, @description, @occurredOn, @metadataJson)
+          (@id, @accountId, @type, @amountCents, @category, @ambientId, @description, @occurredOn, @metadataJson)
       `);
       const common = {
         amountCents: input.amountCents,
         category: 'transfer',
-        painelId: null,
+        ambientId: null,
         description: input.description || 'Transferência entre contas',
         occurredOn: input.occurredOn,
         metadataJson: JSON.stringify({ transferId }),
       };
-      insert.run({ ...common, painelId: from.painelId, id: randomUUID(), accountId: from.id, type: 'transfer_out' });
-      insert.run({ ...common, painelId: to.painelId, id: randomUUID(), accountId: to.id, type: 'transfer_in' });
+      insert.run({ ...common, ambientId: from.ambientId, id: randomUUID(), accountId: from.id, type: 'transfer_out' });
+      insert.run({ ...common, ambientId: to.ambientId, id: randomUUID(), accountId: to.id, type: 'transfer_in' });
       return transferId;
     });
 
@@ -405,7 +473,7 @@ class FinancialRepository {
     const params = { id };
     const values = {
       accountId: 'account_id',
-      painelId: 'painel_id',
+      ambientId: 'ambient_id',
       type: 'type',
       amountCents: 'amount_cents',
       category: 'category',
@@ -417,7 +485,7 @@ class FinancialRepository {
       const account = this.requireAccount(input.accountId);
       if (!account.active) throw new ConflictError('Não é possível mover a transação para uma conta inativa.');
     }
-    if (input.painelId) this.requirePainel(input.painelId);
+    if (input.ambientId) this.requireAmbient(input.ambientId);
 
     for (const [key, column] of Object.entries(values)) {
       if (input[key] !== undefined) {
@@ -445,11 +513,11 @@ class FinancialRepository {
     return { id, deleted: true };
   }
 
-  listTransactions({ accountId, painelId, type, category, from, to, limit, offset }) {
+  listTransactions({ accountId, ambientId, type, category, from, to, limit, offset }) {
     const filters = [];
     const params = {};
     if (accountId) { filters.push('t.account_id = @accountId'); params.accountId = accountId; }
-    if (painelId) { filters.push('t.painel_id = @painelId'); params.painelId = painelId; }
+    if (ambientId) { filters.push('t.ambient_id = @ambientId'); params.ambientId = ambientId; }
     if (type) { filters.push('t.type = @type'); params.type = type; }
     if (category) { filters.push('LOWER(t.category) = LOWER(@category)'); params.category = category; }
     if (from) { filters.push('t.occurred_on >= @from'); params.from = from; }
