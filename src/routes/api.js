@@ -31,6 +31,7 @@ const accountQuerySchema = z.object({
 
 const userQuerySchema = z.object({
   includeInactive: z.enum(['true', 'false']).default('false'),
+  ambientId: z.string().uuid().optional(),
 }).strict();
 
 const ambientQuerySchema = z.object({
@@ -102,7 +103,10 @@ async function apiRoutes(app) {
   app.get('/users', async (request, reply) => {
     const parsed = userQuerySchema.safeParse(request.query);
     if (!parsed.success) return validationError(reply, parsed.error);
-    return { data: repository.listUsers({ includeInactive: parsed.data.includeInactive === 'true' }) };
+    return { data: repository.listUsers({
+      includeInactive: parsed.data.includeInactive === 'true',
+      ambientId: parsed.data.ambientId,
+    }) };
   });
 
   app.get('/ambient', async (request, reply) => {

@@ -152,14 +152,21 @@ class FinancialRepository {
   }
  
 
-  listUsers({ includeInactive = false } = {}) {
-    const sql = `
+  listUsers({ includeInactive = false, ambientId } = {}) {
+    const filters = [];
+    const params = {};
+    if (!includeInactive) filters.push('ambient.active = 1');
+    if (ambientId) {
+      filters.push('users.ambient_id = @ambientId');
+      params.ambientId = ambientId;
+    }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    return this.db.prepare(`
       SELECT users.* FROM users
       JOIN ambient ON ambient.id = users.ambient_id
-      ${includeInactive ? '' : 'WHERE ambient.active = 1'}
+      ${where}
       ORDER BY ambient.active DESC, users.name ASC
-    `;
-    return this.db.prepare(sql).all().map(toUser);
+    `).all(params).map(toUser);
   }
 
   listAmbients({ includeInactive = false } = {}) {

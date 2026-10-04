@@ -116,6 +116,46 @@ test('associa contas e transações ao ambient e filtra por ambientId', async ()
   assert.deepEqual(transactions.body.data.map((item) => item.id), [transaction.id]);
 });
 
+test('lista usuários por ambientId e combina com includeInactive', async () => {
+  const ambientA = payload(await request(app.server)
+    .post('/api/v1/ambient')
+    .send({ name: 'Ambiente usuários A', type: 'standart' })
+    .expect(201));
+  const ambientB = payload(await request(app.server)
+    .post('/api/v1/ambient')
+    .send({ name: 'Ambiente usuários B', type: 'standart' })
+    .expect(201));
+
+  const userA = payload(await request(app.server)
+    .post('/api/v1/users')
+    .send({ name: 'Usuário ambiente A', ambientId: ambientA.id })
+    .expect(201));
+  await request(app.server)
+    .post('/api/v1/users')
+    .send({ name: 'Usuário ambiente B', ambientId: ambientB.id })
+    .expect(201);
+
+  const filtered = await request(app.server)
+    .get(`/api/v1/users?ambientId=${ambientA.id}`)
+    .expect(200);
+  assert.deepEqual(filtered.body.data.map((user) => user.id), [userA.id]);
+
+  await request(app.server)
+    .patch(`/api/v1/ambient/${ambientA.id}`)
+    .send({ active: false })
+    .expect(200);
+
+  const activeOnly = await request(app.server)
+    .get(`/api/v1/users?ambientId=${ambientA.id}`)
+    .expect(200);
+  assert.deepEqual(activeOnly.body.data, []);
+
+  const includingInactive = await request(app.server)
+    .get(`/api/v1/users?ambientId=${ambientA.id}&includeInactive=true`)
+    .expect(200);
+  assert.deepEqual(includingInactive.body.data.map((user) => user.id), [userA.id]);
+});
+
 test('atualiza ambiente e dados do usuário', async () => {
   const ambient = payload(await request(app.server)
     .post('/api/v1/ambient')
