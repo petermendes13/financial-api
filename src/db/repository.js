@@ -1,4 +1,19 @@
-const { randomUUID } = require('node:crypto');
+const { randomBytes, randomUUID, scryptSync, timingSafeEqual } = require('node:crypto');
+
+function hashPassword(password) {
+  const salt = randomBytes(16).toString('hex');
+  const hash = scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  if (!storedHash) return false;
+  const [salt, hash] = storedHash.split(':');
+  if (!salt || !hash) return false;
+  const expected = Buffer.from(hash, 'hex');
+  const actual = scryptSync(password, salt, expected.length);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
 
 class NotFoundError extends Error {
   constructor(message) {
@@ -20,6 +35,7 @@ function toUser(row) {
     id: row.id,
     name: row.name,
     ambientId: row.ambient_id,
+    login: row.login,
     active: Boolean(row.ambient_active),
     num_tel: row.num_tel,
     chat_id: row.chat_id,
@@ -105,13 +121,15 @@ class FinancialRepository {
     const now = new Date().toISOString();
     this.db.prepare(`
       INSERT INTO users
-        (id, name, ambient_id, num_tel, chat_id, created_at, updated_at)
+        (id, name, ambient_id, login, password_hash, num_tel, chat_id, created_at, updated_at)
       VALUES
-        (@id, @name, @ambientId, @num_tel, @chat_id, @now, @now)
+        (@id, @name, @ambientId, @login, @passwordHash, @num_tel, @chat_id, @now, @now)
     `).run({
       id,
       name: input.name,
       ambientId: input.ambientId,
+      login: input.login || null,
+      passwordHash: input.senha ? hashPassword(input.senha) : null,
       num_tel: input.num_tel,
       chat_id: input.chat_id,
       now,
@@ -218,6 +236,11 @@ class FinancialRepository {
     `).get(chatId));
   }
 
+  authenticateUser(login, password) {
+    const user = this.db.prepare('SELECT password_hash FROM users WHERE login = ?').get(login);
+    return Boolean(user && verifyPassword(password, user.password_hash));
+  }
+
   getAmbient(id) {
     return toAmbient(this.db.prepare('SELECT * FROM ambient WHERE id = ?').get(id));
   }
@@ -247,6 +270,7 @@ class FinancialRepository {
     const params = { id, updatedAt: new Date().toISOString() };
     const columns = {
       name: 'name',
+      login: 'login',
       num_tel: 'num_tel',
       chat_id: 'chat_id',
       ambientId: 'ambient_id',
@@ -259,6 +283,10 @@ class FinancialRepository {
         fields.push(`${column} = @${key}`);
         params[key] = input[key];
       }
+    }
+    if (input.senha !== undefined) {
+      fields.push('password_hash = @passwordHash');
+      params.passwordHash = hashPassword(input.senha);
     }
 
     fields.push('updated_at = @updatedAt');

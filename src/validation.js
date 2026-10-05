@@ -16,8 +16,15 @@ const accountSchema = z.object({
 const userSchema = z.object({
   name: z.string().trim().min(1).max(120),
   ambientId: uuid,
+  login: z.string().trim().min(1).max(100).optional(),
+  senha: z.string().min(8).max(128).optional(),
   num_tel: z.string().trim().min(1).max(20).default('0'),
   chat_id: z.string().trim().min(1).max(100).default('0'),
+}).strict();
+
+const authenticationSchema = z.object({
+  login: z.string().trim().min(1).max(100),
+  senha: z.string().min(8).max(128),
 }).strict();
 
 const ambientSchema = z.object({
@@ -113,6 +120,7 @@ function firstDayOfCurrentMonth() {
 module.exports = {
   accountSchema,
   userSchema,
+  authenticationSchema,
   ambientSchema,
   accountUpdateSchema,
   userUpdateSchema,

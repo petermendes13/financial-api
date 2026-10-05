@@ -3,6 +3,7 @@ const {
   accountSchema,
   userSchema,
   userUpdateSchema,
+  authenticationSchema,
   ambientSchema,
   ambientUpdateSchema,
   accountUpdateSchema,
@@ -69,6 +70,12 @@ async function apiRoutes(app) {
   const { repository } = app;
 
   app.get('/health', async () => ({ status: 'ok', service: 'financial-api', timestamp: new Date().toISOString() }));
+
+  app.post('/auth', async (request, reply) => {
+    const input = parseBody(authenticationSchema, request, reply);
+    if (!input) return;
+    return { data: { authenticated: repository.authenticateUser(input.login, input.senha) } };
+  });
 
   app.post('/accounts', async (request, reply) => {
     const input = parseBody(accountSchema, request, reply);

@@ -203,11 +203,25 @@ test('atualiza ambiente e dados do usuário', async () => {
 
   const user = payload(await request(app.server)
     .post('/api/v1/users')
-    .send({ name: 'Usuário para editar', ambientId: ambient.id, chat_id: 'chat-ambiente-inativo' })
+    .send({
+      name: 'Usuário para editar',
+      ambientId: ambient.id,
+      login: 'usuario-inicial',
+      senha: 'senha-inicial-123',
+      chat_id: 'chat-ambiente-inativo',
+    })
     .expect(201));
   assert.equal(user.num_tel, '0');
   assert.equal(user.chat_id, 'chat-ambiente-inativo');
+  assert.equal(user.login, 'usuario-inicial');
+  assert.equal('senha' in user, false);
   assert.equal(user.active, false);
+
+  const initialAuthentication = payload(await request(app.server)
+    .post('/api/v1/auth')
+    .send({ login: 'usuario-inicial', senha: 'senha-inicial-123' })
+    .expect(200));
+  assert.equal(initialAuthentication.authenticated, true);
 
   const inactiveUserById = await request(app.server)
     .get(`/api/v1/users/${user.id}`)
@@ -221,11 +235,42 @@ test('atualiza ambiente e dados do usuário', async () => {
 
   const updatedUser = payload(await request(app.server)
     .patch(`/api/v1/users/${user.id}`)
-    .send({ num_tel: '5511888888888', chat_id: 'chat-novo' })
+    .send({ num_tel: '5511888888888', chat_id: 'chat-novo', login: 'usuario-editar', senha: 'senha-forte-123' })
     .expect(200));
 
   assert.equal(updatedUser.num_tel, '5511888888888');
   assert.equal(updatedUser.chat_id, 'chat-novo');
+  assert.equal(updatedUser.login, 'usuario-editar');
+  assert.equal('senha' in updatedUser, false);
+  assert.equal('password_hash' in updatedUser, false);
+
+  const storedHash = database.db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id).password_hash;
+  assert.notEqual(storedHash, 'senha-forte-123');
+
+  const validAuthentication = payload(await request(app.server)
+    .post('/api/v1/auth')
+    .send({ login: 'usuario-editar', senha: 'senha-forte-123' })
+    .expect(200));
+  assert.equal(validAuthentication.authenticated, true);
+
+  const invalidAuthentication = payload(await request(app.server)
+    .post('/api/v1/auth')
+    .send({ login: 'usuario-editar', senha: 'senha-incorreta' })
+    .expect(200));
+  assert.equal(invalidAuthentication.authenticated, false);
+
+  const missingUserAuthentication = payload(await request(app.server)
+    .post('/api/v1/auth')
+    .send({ login: 'login-ausente', senha: 'senha-forte-123' })
+    .expect(200));
+  assert.equal(missingUserAuthentication.authenticated, false);
+
+  const fetchedUser = payload(await request(app.server)
+    .get(`/api/v1/users/${user.id}`)
+    .expect(200));
+  assert.equal(fetchedUser.login, 'usuario-editar');
+  assert.equal('senha' in fetchedUser, false);
+  assert.equal('password_hash' in fetchedUser, false);
 
   const deletedUser = payload(await request(app.server)
     .delete(`/api/v1/users/${user.id}`)

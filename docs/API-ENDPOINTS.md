@@ -6,7 +6,7 @@ Esta referência documenta todas as rotas HTTP disponíveis, parâmetros de cami
 
 A API utiliza JSON nas requisições e nas respostas. Todos os valores monetários são representados em **centavos inteiros**. Portanto, `R$ 1.250,50` deve ser enviado como `125050`.
 
-Nenhum endpoint implementa autenticação ou autorização nesta versão. Não exponha a API publicamente sem adicionar esses controles.
+A rota `POST /auth` verifica login e senha, mas a API ainda não implementa autorização para proteger as demais rotas. Não exponha a API publicamente sem adicionar esses controles.
 
 ## 2. Pré-requisitos
 
@@ -65,6 +65,7 @@ Todas as rotas abaixo usam o prefixo `/api/v1`.
 | Método | Rota | Descrição |
 | --- | --- | --- |
 | `GET` | `/health` | Verifica se a API está disponível. |
+| `POST` | `/auth` | Verifica login e senha de um usuário. |
 | `POST` | `/accounts` | Cria uma conta. |
 | `GET` | `/accounts` | Lista e filtra contas. |
 | `GET` | `/accounts/:id` | Consulta uma conta pelo ID. |
@@ -186,6 +187,27 @@ Depois crie o usuário com o ID do ambiente retornado. `name` e `ambientId` são
 | `ambientId` | UUID | Sim | ID de um ambiente existente. |
 | `num_tel` | string | Não | De 1 a 20 caracteres após trim; padrão `"0"`. |
 | `chat_id` | string | Não | De 1 a 100 caracteres após trim; padrão `"0"`. |
+| `login` | string | Não | De 1 a 100 caracteres após trim; deve ser único quando informado. |
+| `senha` | string | Não | De 8 a 128 caracteres; pode ser definida já na criação. |
+
+As credenciais também podem ser cadastradas ou alteradas com `PATCH /api/v1/users/:id`. `senha` é armazenada como hash e nunca aparece nas respostas de usuários. O login pode ser enviado junto com a senha.
+
+```json
+{
+  "login": "bruno",
+  "senha": "uma-senha-forte"
+}
+```
+
+Para verificar as credenciais, envie `POST /api/v1/auth` com `login` e `senha`. A resposta `200 OK` informa somente se os dados conferem; login inexistente e senha incorreta retornam `authenticated: false`.
+
+```json
+{
+  "data": {
+    "authenticated": true
+  }
+}
+```
 
 Objetos de usuário retornam `active`, calculado pelo campo `active` do ambiente associado. Se o ambiente ou o valor estiver ausente/nulo, `active` é retornado como `false`.
 
